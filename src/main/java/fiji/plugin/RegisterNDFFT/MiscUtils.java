@@ -1,4 +1,4 @@
-package registerndfft;
+package fiji.plugin.RegisterNDFFT;
 
 import net.imglib2.Cursor;
 import net.imglib2.IterableInterval;

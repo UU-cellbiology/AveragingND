@@ -1,10 +1,9 @@
-package registerndfft;
+package fiji.plugin.RegisterNDFFT;
 
 import ij.IJ;
 
 import net.imglib2.Cursor;
 import net.imglib2.FinalInterval;
-import net.imglib2.IterableInterval;
 import net.imglib2.Point;
 import net.imglib2.RandomAccess;
 import net.imglib2.RandomAccessibleInterval;
@@ -14,15 +13,17 @@ import net.imglib2.algorithm.integral.IntegralImgDouble;
 import net.imglib2.converter.RealDoubleConverter;
 import net.imglib2.img.Img;
 import net.imglib2.img.ImgFactory;
+import net.imglib2.img.array.ArrayImg;
 import net.imglib2.img.array.ArrayImgFactory;
+import net.imglib2.img.array.ArrayImgs;
+import net.imglib2.img.basictypeaccess.array.FloatArray;
+import net.imglib2.img.basictypeaccess.array.IntArray;
 import net.imglib2.img.display.imagej.ImageJFunctions;
 import net.imglib2.iterator.LocalizingIntervalIterator;
-import net.imglib2.type.Type;
-import net.imglib2.type.numeric.RealType;
 import net.imglib2.type.numeric.complex.ComplexFloatType;
+import net.imglib2.type.numeric.integer.IntType;
 import net.imglib2.type.numeric.real.DoubleType;
 import net.imglib2.type.numeric.real.FloatType;
-import net.imglib2.util.RealSum;
 import net.imglib2.view.IntervalView;
 import net.imglib2.view.Views;
 
@@ -52,7 +53,7 @@ public class RegisterTranslation
 		
 		int i;
 		
-
+		double maxShift = 0.5;
 		//copies
 		final Img< FloatType > image = MiscUtils.copyImage( image_in );
 		final Img< FloatType > template = MiscUtils.copyImage( template_in );
@@ -65,8 +66,8 @@ public class RegisterTranslation
 		template.dimensions(temDim);
 
 		// display image and template
-		ImageJFunctions.show( image_in ).setTitle( "input" );
-		ImageJFunctions.show( template_in ).setTitle( "template" );
+		//ImageJFunctions.show( image_in ).setTitle( "input" );
+		//ImageJFunctions.show( template_in ).setTitle( "template" );
 
 		
 		long nPixImg = imgDim[0];
@@ -94,18 +95,18 @@ public class RegisterTranslation
 		long [][] finDim = new long[2][nDim];
 		for(i=0;i<nDim;i++)
 		{
-			cropCorr[0][i]=Math.round((-0.5)*temDim[i]);
-			cropCorr[1][i]=Math.round(0.5*imgDim[i]);
+			cropCorr[0][i]=Math.round((-maxShift)*temDim[i]);
+			cropCorr[1][i]=Math.round(maxShift*imgDim[i]);
 			finDim[0][i]=0;
 			finDim[1][i]=Math.max(imgDim[i]-1, temDim[i]-1);
 		}
 				
-		//long[] paddedDimensions = new long[template.numDimensions()];
-		//long[] fftSize = new long[template.numDimensions()];
-		//FFTMethods.dimensionsRealToComplexFast(template, paddedDimensions, fftSize);
+		long[] paddedDimensions = new long[template.numDimensions()];
+		long[] fftSize = new long[template.numDimensions()];
+		FFTMethods.dimensionsRealToComplexFast(template, paddedDimensions, fftSize);
 		
-		final ImgFactory< ComplexFloatType > factoryComplex = new ArrayImgFactory< ComplexFloatType >();
-		final ImgFactory< FloatType > factoryFloat = new ArrayImgFactory< FloatType >();
+		final ImgFactory< ComplexFloatType > factoryComplex = new ArrayImgFactory< ComplexFloatType >(new ComplexFloatType());
+		final ImgFactory< FloatType > factoryFloat = new ArrayImgFactory< FloatType >(new FloatType());
 		
 		final Img< ComplexFloatType > imageFFT2;
 		final Img< ComplexFloatType > templateFFT2;
@@ -134,11 +135,16 @@ public class RegisterTranslation
 		//return back to normal space
 		final Img< FloatType > invertedT = FFT.complexToReal(templateFFT2, factoryFloat, new FloatType());		
 		
+
 		//range of CC
 		FinalInterval interval = new FinalInterval( cropCorr[0] ,  cropCorr[1] );
-
-		//swap quadrants
-		IntervalView< FloatType > ivCC = Views.interval( Views.extendPeriodic( invertedT ),interval);
+		ImageJFunctions.show(invertedT).setTitle( "FFTinv" );
+		//swap quadrants (fftshift)
+		long [] fftshift = new long [nDim];
+		invertedT.max(fftshift);
+		//IntervalView< FloatType > ivCC = Views.interval( Views.translate(Views.extendPeriodic( invertedT ),fftshift),interval);
+		IntervalView< FloatType > ivCCswapped = Views.interval( Views.extendPeriodic( invertedT ),interval);
+		//ImageJFunctions.show(ivCCswapped).setTitle( "nonnorm" );
 		
 		//calculate summed-area tables for padded images (intensity squared)
 		MiscUtils.squareValues(padIm);
@@ -161,30 +167,45 @@ public class RegisterTranslation
 		// let's take a look at one of them
 		//ImageJFunctions.show(imgIntegral).setTitle( "integral_image" );
 		
-		
-		// normalize cross-correlation
-		LocalizingIntervalIterator iCC = new LocalizingIntervalIterator(ivCC);
-		RandomAccess<FloatType> raCC = ivCC.randomAccess();
+	
 		final long [] curr_shift = new long [nDim];
 		final long [][] overlapImg = new long [2][nDim];
 		final long [][] overlapTem = new long [2][nDim];
 		
+		long [] dimnorm = new long [nDim];
+		for (i=0;i<nDim;i++)
+		{
+			dimnorm[i]=cropCorr[1][i]-cropCorr[0][i]+1;
+		}
+		
+
 		//calculate indexes and signes for integral image calculation
 		calc_index_sign_norm_CC(nDim);
-		double dIntImg, dIntTem;
-		while (iCC.hasNext()) 
+
+		
+		//final correlation normalized image
+		ArrayImg<FloatType, FloatArray> normCC = ArrayImgs.floats(dimnorm);
+		IntervalView< FloatType > ivCC = Views.translate(normCC, cropCorr[0]);
+		final Cursor< FloatType> ivCCRA = ivCC.cursor();
+		
+		double dIntImg, dIntTem, dFin,dCorr;
+		Cursor <FloatType> ivInvCursor = ivCCswapped.cursor();
+		while (ivInvCursor.hasNext())
 		{
-			iCC.fwd();			
-			iCC.localize(curr_shift);
+			ivCCRA.fwd();
+			ivInvCursor.fwd();
+			ivInvCursor.localize(curr_shift);
 			calc_overlap(finDim, curr_shift,overlapImg,overlapTem);
 			dIntImg=getIntegralIntensityOverlap(imgIntegral,overlapImg);
 			dIntTem=getIntegralIntensityOverlap(temIntegral,overlapTem);
-			dIntImg=Math.sqrt(dIntImg*dIntTem);
-			raCC.setPosition(iCC);
-			dIntImg = raCC.get().get()/dIntImg;
-			raCC.get().set((float) dIntImg);
+
+			dFin=1.0/Math.sqrt(dIntImg*dIntTem);			
+			
+			dCorr = ivInvCursor.get().get();
+			ivCCRA.get().set((float)(dCorr*dFin));
+			
 		}
-		
+				
 		//now find max value
 		Point shift = new Point(nDim);
 		MiscUtils.computeMaxLocation(ivCC,shift);
@@ -192,10 +213,10 @@ public class RegisterTranslation
 		{
 			IJ.log("dim "+Integer.toString(i)+": "+Integer.toString(shift.getIntPosition(i)));
 		}
-		Views.interval(Views.extendZero(template),interval);
+		//Views.interval(Views.extendZero(template),interval);
 		
 		shift.localize(shift_pos);
-		Views.interval(Views.translate(Views.extendZero(template), shift_pos),template);
+		//Views.interval(Views.translate(Views.extendZero(template), shift_pos),template);
 		
 		ImageJFunctions.show(ivCC).setTitle( "cross-correlation" );
 		ImageJFunctions.show(Views.interval(Views.translate(Views.extendZero(template_in), shift_pos),image_in)).setTitle("registered template");
@@ -235,21 +256,21 @@ public class RegisterTranslation
 		
 		int n, nInd, nSum;
 		
-		String outS;
+		//String outS;
 		for(byte i=0;i<nTerms;i++)
 		{
-			outS="";
+			//outS="";
 			nSum =0 ;
 			for(n=0;n<nDim;n++)
 			{
 				nInd=(i >> (nDim-n-1)) & 1;
-				outS=outS+Integer.toString(nInd);
+				//outS=outS+Integer.toString(nInd);
 				normCCindexes[i][n]=nInd;
 				nSum+=nInd;
 			}
 			signs[i]=Math.pow(-1, nDim-nSum);
-			outS=Double.toString(signs[i])+"  "+outS;
-			System.out.println(outS);
+			//outS=Double.toString(signs[i])+"  "+outS;
+			//System.out.println(outS);
 		}
 		
 	}
@@ -278,6 +299,26 @@ public class RegisterTranslation
 			
 		}
 		return res;		
+	}
+	
+	public double honestSum(IntervalView< FloatType > pad, long [][] range)
+	{
+		double sum = 0;
+		long [][] rangex = new long [2][nDim];
+		for (int i = 0; i<nDim;i++)
+		{
+			rangex[0][i]=range[0][i];
+			rangex[1][i]=range[1][i]-1;
+		}
+		IntervalView< FloatType > padRange = Views.interval(pad,rangex[0],rangex[1]);
+		for ( final FloatType type : padRange )
+		{
+			sum += type.get();
+			//type.setReal( val*val );
+		}
+		
+		return sum;
+		
 	}
 
 }
