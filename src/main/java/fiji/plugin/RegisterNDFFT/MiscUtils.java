@@ -46,8 +46,8 @@ public class MiscUtils {
 	
 	
 	/** computes location of the maximum voxel **/
-	public static < T extends Comparable< T > & Type< T > > void computeMaxLocation(
-			final IterableInterval< T > input, final Point maxLocation )
+	public static < T extends Comparable< T > & Type< T > > T computeMaxLocation(
+			final IterableInterval< T > input, final Point maxLocation)
 		{
 			// create a cursor for the image (the order does not matter)
 			final Cursor< T > cursor = input.cursor();
@@ -69,6 +69,7 @@ public class MiscUtils {
 					maxLocation.setPosition( cursor );
 				}
 			}
+			return max;
 		}
 	
 	/**

@@ -33,7 +33,7 @@ public class GenNormCC {
 	 * @param image
 	 * @param template
 	 */
-	public static void caclulateGenNormCC(final Img< FloatType > image, final Img< FloatType > template, double max_fraction_shift) //throws ImgIOException, IncompatibleTypeException
+	public static void caclulateGenNormCC(final Img< FloatType > image, final Img< FloatType > template, double max_fraction_shift, boolean bShowCC) //throws ImgIOException, IncompatibleTypeException
 	{
 		int i;
 		int nDim;
@@ -227,17 +227,26 @@ public class GenNormCC {
 		}
 		FinalInterval interval = new FinalInterval( cropCorr[0] ,  cropCorr[1] );
 		IntervalView< FloatType > ivCCswapped = Views.interval( Views.extendPeriodic( invF1F2 ),interval);
-		ImageJFunctions.show(ivCCswapped).setTitle( "General cross-correlation" );
+		if(bShowCC)
+		{
+			ImageJFunctions.show(ivCCswapped).setTitle( "General cross-correlation" );
+		}
 		//ImageJFunctions.show(Views.interval( Views.extendPeriodic( invF1F1I2 ),interval)).setTitle( "Denominator" );
 		
 		
 		//now find max value
 		Point shift = new Point(nDim);
-		MiscUtils.computeMaxLocation(ivCCswapped,shift);
-		for(i=0;i<nDim;i++)
+		FloatType fCCvalue = MiscUtils.computeMaxLocation(ivCCswapped,shift);
+		
+		
+		String sOutput = "Translation for template to overlap with image (px):\n("+Integer.toString(shift.getIntPosition(0))  ;
+		for(i=1;i<nDim;i++)
 		{
-			IJ.log("dim "+Integer.toString(i)+": "+Integer.toString(shift.getIntPosition(i)));
+			sOutput = sOutput +", " +Integer.toString(shift.getIntPosition(i));
+			//IJ.log("dim "+Integer.toString(i)+": "+Integer.toString(shift.getIntPosition(i)));
 		}
+		sOutput=sOutput+")\nMaximum normalized cross-correlation value: "+Float.toString(fCCvalue.get());
+		IJ.log(sOutput);
 		
 		/** final shift of images **/
 		long [] shift_pos = new long [nDim];

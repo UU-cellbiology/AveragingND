@@ -34,6 +34,8 @@ public class RegisterNDFFT implements PlugIn
 	
 	public static int defaultImg1 = 0;
 	public static int defaultImg2 = 1;
+	public static boolean bShowCC = true;
+	public static double max_fraction = 0.5;
 
 	@Override
 	public void run(String arg) {
@@ -67,6 +69,7 @@ public class RegisterNDFFT implements PlugIn
 		gd1.addChoice("First_image (reference)", imgList, imgList[ defaultImg1 ] );
 		gd1.addChoice("Second_image (to register)", imgList, imgList[ defaultImg2 ] );
 		gd1.addNumericField("Maximum shift (fraction, 0-1 range)", 0.9, 3);
+		gd1.addCheckbox("Show cross-correlation", true);
 				
 		gd1.showDialog();
 		
@@ -75,13 +78,15 @@ public class RegisterNDFFT implements PlugIn
 		
 		ImagePlus imp1 = WindowManager.getImage( idList[ defaultImg1 = gd1.getNextChoiceIndex() ] );		
 		ImagePlus imp2 = WindowManager.getImage( idList[ defaultImg2 = gd1.getNextChoiceIndex() ] );	
-		double max_fraction = gd1.getNextNumber();
 		
+		
+		max_fraction = gd1.getNextNumber();
+		bShowCC  = gd1.getNextBoolean();
 		
 		final Img< FloatType > image_in = ImagePlusAdapter.convertFloat(imp1);
 		final Img< FloatType > template_in = ImagePlusAdapter.convertFloat(imp2);
 
-		GenNormCC.caclulateGenNormCC(image_in, template_in, max_fraction);
+		GenNormCC.caclulateGenNormCC(image_in, template_in, max_fraction, bShowCC);
 
 		RegisterTranslation reg = new RegisterTranslation(image_in.numDimensions());
 		
@@ -117,7 +122,7 @@ public class RegisterNDFFT implements PlugIn
 		final Img< FloatType > template_in = io.openImgs( "linetest2Dn_shift.tif",
 				new FloatType() ).get( 0 );
 */
-		GenNormCC.caclulateGenNormCC(image_in, template_in, 1.0);
+		GenNormCC.caclulateGenNormCC(image_in, template_in, 1.0, true);
 		//RegisterTranslation reg = new RegisterTranslation(image_in .numDimensions());
 		// run the example
 		//reg.registerTranslation(image_in, template_in);
