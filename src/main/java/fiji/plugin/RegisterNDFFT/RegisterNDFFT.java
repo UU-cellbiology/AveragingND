@@ -66,6 +66,7 @@ public class RegisterNDFFT implements PlugIn
 		
 		gd1.addChoice("First_image (reference)", imgList, imgList[ defaultImg1 ] );
 		gd1.addChoice("Second_image (to register)", imgList, imgList[ defaultImg2 ] );
+		gd1.addNumericField("Maximum shift (fraction, 0-1 range)", 0.9, 3);
 				
 		gd1.showDialog();
 		
@@ -74,12 +75,18 @@ public class RegisterNDFFT implements PlugIn
 		
 		ImagePlus imp1 = WindowManager.getImage( idList[ defaultImg1 = gd1.getNextChoiceIndex() ] );		
 		ImagePlus imp2 = WindowManager.getImage( idList[ defaultImg2 = gd1.getNextChoiceIndex() ] );	
+		double max_fraction = gd1.getNextNumber();
+		
 		
 		final Img< FloatType > image_in = ImagePlusAdapter.convertFloat(imp1);
 		final Img< FloatType > template_in = ImagePlusAdapter.convertFloat(imp2);
+
+		GenNormCC.caclulateGenNormCC(image_in, template_in, max_fraction);
+
 		RegisterTranslation reg = new RegisterTranslation(image_in.numDimensions());
 		
 		reg.registerTranslation(image_in, template_in);
+		
 	}
 	
 	public static void main( final String[] args ) throws ImgIOException, IncompatibleTypeException
@@ -89,26 +96,31 @@ public class RegisterNDFFT implements PlugIn
 		
 		// open with SCIFIO ImgOpener as FloatTypes
 		ImgOpener io = new ImgOpener();
-		
-		//final Img< FloatType > image_in = io.openImgs( "Zstack 1.1-1-1.tif",
-		//	new FloatType() ).get( 0 );
+		/*
+		final Img< FloatType > image_in = io.openImgs( "Zstack 1.1-1-1.tif",
+			new FloatType() ).get( 0 );
 		//final Img< FloatType > template_in = io.openImgs( "Zstack 1.1-1-1.tif",
-		//final Img< FloatType > template_in = io.openImgs( "Zstack 1.2-2-1.tif",
-			//new FloatType() ).get( 0 );
+		final Img< FloatType > template_in = io.openImgs( "Zstack 1.2-2-1.tif",
+			new FloatType() ).get( 0 );
+		*/
+			
 		
-/*		final Img< FloatType > image_in = io.openImgs( "linetest2Dn.tif",
-				new FloatType() ).get( 0 );
-		final Img< FloatType > template_in = io.openImgs( "linetest2Dn_shift.tif",
-				new FloatType() ).get( 0 );*/
-
+		
 		final Img< FloatType > image_in = io.openImgs( "linetest2Dn.tif",
 				new FloatType() ).get( 0 );
+		final Img< FloatType > template_in = io.openImgs( "linetest2Dn.tif",
+				new FloatType() ).get( 0 );
+		
+
+/*	final Img< FloatType > image_in = io.openImgs( "linetest2Dn.tif",
+				new FloatType() ).get( 0 );
 		final Img< FloatType > template_in = io.openImgs( "linetest2Dn_shift.tif",
 				new FloatType() ).get( 0 );
-
-		RegisterTranslation reg = new RegisterTranslation(image_in .numDimensions());
+*/
+		GenNormCC.caclulateGenNormCC(image_in, template_in, 1.0);
+		//RegisterTranslation reg = new RegisterTranslation(image_in .numDimensions());
 		// run the example
-		reg.registerTranslation(image_in, template_in);
+		//reg.registerTranslation(image_in, template_in);
 
 		
 	

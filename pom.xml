@@ -5,21 +5,21 @@
 	<parent>
 		<groupId>org.scijava</groupId>
 		<artifactId>pom-scijava</artifactId>
-		<version>27.0.0</version>
+		<version>30.0.0</version>
 		<relativePath />
 	</parent>
 
-	<groupId>net.imglib2</groupId>
-	<artifactId>imglib2-tutorials</artifactId>
-	<version>0.1.0-SNAPSHOT</version>
+	<groupId>sc.fiji</groupId>
+	<artifactId>RegisterNDFFT</artifactId>
+	<version>0.0.1-SNAPSHOT</version>
 
 	<name>RegisterNDFFT</name>
 	<description>Registration of ND images using FFT and imglib2. </description>
-	<url>https://imagej.net/ImgLib2_Examples</url>
+	<url>https://github.com/ekatrukha/RegisterNDFFT</url>
 	<inceptionYear>2021</inceptionYear>
 	<organization>
-		<name>ImgLib2</name>
-		<url>http://imglib2.net/</url>
+		<name>Fiji</name>
+		<url>https://fiji.sc/</url>
 	</organization>
 	<licenses>
 		<license>
@@ -44,7 +44,11 @@
 		    </roles>
 		</developer>
 	</developers>
-
+    <contributors>
+        <contributor>
+            <name>None</name>
+        </contributor>
+    </contributors>
 	<mailingLists>
 		<mailingList>
 			<name>Image.sc Forum</name>
@@ -55,7 +59,7 @@
 
 	<scm>
 		<connection>scm:git:https://github.com/ekatrukha/RegisterNDFFT</connection>
-		<developerConnection>scm:git:git@github.com:imglib/imglib2-tutorials</developerConnection>
+		<developerConnection>scm:git:git@github.com:ekatrukha/RegisterNDFFT</developerConnection>
 		<tag>HEAD</tag>
 		<url>https://github.com/ekatrukha/RegisterNDFFT</url>
 	</scm>
@@ -75,13 +79,12 @@
         	<license.copyrightOwners>Fiji distribution of ImageJ for the life sciences.</license.copyrightOwners>
 	</properties>
 
-	<repositories>
-		<!-- NB: for SciJava dependencies -->
-		<repository>
-			<id>scijava.public</id>
-			<url>https://maven.scijava.org/content/groups/public</url>
-		</repository>
-	</repositories>
+    <repositories>
+        <repository>
+            <id>imagej.public</id>
+            <url>http://maven.imagej.net/content/groups/public</url>
+        </repository>
+    </repositories>
 
 	<dependencies>
 		<!-- ImgLib2 dependencies -->
@@ -92,10 +95,6 @@
 		<dependency>
 			<groupId>net.imglib2</groupId>
 			<artifactId>imglib2-algorithm</artifactId>
-		</dependency>
-		<dependency>
-			<groupId>net.imglib2</groupId>
-			<artifactId>imglib2-algorithm-fft2</artifactId>
 		</dependency>
 		<dependency>
 			<groupId>net.imglib2</groupId>
@@ -117,40 +116,19 @@
 		<!-- ImageJ dependencies -->
 		<dependency>
 			<groupId>net.imagej</groupId>
-			<artifactId>imagej-common</artifactId>
+			<artifactId>imagej</artifactId>
 		</dependency>
 		<dependency>
-			<groupId>net.imagej</groupId>
-			<artifactId>ij</artifactId>
-		</dependency>
-
+        	<groupId>sc.fiji</groupId>
+        	<artifactId>fiji-lib</artifactId>
+        </dependency>
 		<!-- SCIFIO dependencies -->
 		<dependency>
 			<groupId>io.scif</groupId>
 			<artifactId>scifio</artifactId>
 		</dependency>
 
-		<!-- Test scope dependencies -->
-		<dependency>
-			<groupId>sc.fiji</groupId>
-			<artifactId>bigdataviewer-vistools</artifactId>
-			<scope>test</scope>
-		</dependency>
 	</dependencies>
 
-	<build>
-		<plugins>
-			<plugin>
-				<artifactId>maven-jar-plugin</artifactId>
-				<configuration>
-					<archive>
-						<manifest>
-							<mainClass>game.Arena</mainClass>
-						</manifest>
-					</archive>
-				</configuration>
-			</plugin>
-		</plugins>
-	</build>
 
 </project>
