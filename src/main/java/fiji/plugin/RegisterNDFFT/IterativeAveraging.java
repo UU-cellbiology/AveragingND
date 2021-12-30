@@ -86,6 +86,7 @@ public class IterativeAveraging implements PlugIn {
 		ArrayList<RandomAccessibleInterval< FloatType >> imgs = new ArrayList<RandomAccessibleInterval< FloatType >>();
 		/** shifted images for average calculation**/
 		ArrayList<RandomAccessibleInterval< FloatType >> imgs_shift = new ArrayList<RandomAccessibleInterval< FloatType >>();
+		//ArrayList<IntervalView< FloatType >> imgs_shift = new ArrayList<IntervalView< FloatType >>();
 		/** shift of each image **/
 		ArrayList<long []> shifts = new ArrayList<long[]>();
 		nImageN=idList.length;
@@ -112,8 +113,8 @@ public class IterativeAveraging implements PlugIn {
 		ArrayList<IntervalView<FloatType>> sumAndCount = null;
 		sumAndCount = AverageWithoutZero.sumAndCountArray(imgs);
 		//IntervalView<FloatType> averageImg = AverageWithoutZero.averageArray(imgs);
-		IntervalView<FloatType> averageImg = null;// AverageWithoutZero.averageArray(imgs);
-		Img<FloatType> currAverageImg;// = AverageWithoutZero.averageArray(imgs);
+		//IntervalView<FloatType> averageImg = null;// AverageWithoutZero.averageArray(imgs);
+		IntervalView<FloatType> currAverageImg;// = AverageWithoutZero.averageArray(imgs);
 		if(bShowIntermediateAverage)
 		{
 			//MiscUtils.wrapFloatImgCal(averageImg, "average 0",cal, false).show();
@@ -137,8 +138,15 @@ public class IterativeAveraging implements PlugIn {
 			for(i=0;i<nImageN;i++)
 			{
 				//TODO: proper subtraction
-				currAverageImg = subtractFromAverage(averageImg,imgs_shift.get(i));
-				ImageJFunctions.show(currAverageImg).setTitle( "sep" );
+				//currAverageImg = subtractFromAverage(averageImg,imgs_shift.get(i));
+				currAverageImg = removeOneAverage(sumAndCount,imgs_shift.get(i));
+				if(iter>=5 && i ==1)
+				{
+					ImageJFunctions.show(currAverageImg).setTitle( "currAver" + Integer.toString(iter+1));
+					ImageJFunctions.show(sumAndCount.get(0)).setTitle( "sum" + Integer.toString(iter+1));
+					ImageJFunctions.show(sumAndCount.get(1)).setTitle( "count" + Integer.toString(iter+1));
+				}
+				//long [] valx =currAverageImg.minAsLongArray(); 
 				normCC.caclulateGenNormCC(currAverageImg, imgs.get(i), dMaxFraction , false);
 				ptable.incrementCounter();
 				ptable.addValue("iter", iter+1);
@@ -173,10 +181,11 @@ public class IterativeAveraging implements PlugIn {
 			ptableCC.addValue("averCC", avrgCC);
 			ptableCC.addValue("cumShift", cumShift);
 			IJ.log("Iteration "+Integer.toString(iter+1)+" average CC " +Double.toString(avrgCC));
-			averageImg = AverageWithoutZero.averageArray(imgs_shift);
+			sumAndCount = AverageWithoutZero.sumAndCountArray(imgs_shift);
+			//averageImg = AverageWithoutZero.averageArray(imgs_shift);
 			if(bShowIntermediateAverage)
 			{
-				MiscUtils.wrapFloatImgCal(averageImg,"average iteration "+Integer.toString(iter+1),cal, false).show();
+				MiscUtils.wrapFloatImgCal(AverageWithoutZero.averageFromSumAndCount(sumAndCount),"average iteration "+Integer.toString(iter+1),cal, false).show();
 			}
 
 		}
@@ -185,7 +194,7 @@ public class IterativeAveraging implements PlugIn {
 		ptableCC.show("Average CC");
 		if(!bMultiCh)
 		{
-			MiscUtils.wrapFloatImgCal(averageImg,"final average "+Integer.toString(iter+1),cal,false).show();
+			MiscUtils.wrapFloatImgCal(AverageWithoutZero.averageFromSumAndCount(sumAndCount),"final average "+Integer.toString(iter+1),cal,false).show();
 		}
 		else
 		{
@@ -245,5 +254,54 @@ public class IterativeAveraging implements PlugIn {
 		}
 		
 		return finImg;
+	}
+	
+	IntervalView<FloatType> removeOneAverage(ArrayList<IntervalView<FloatType>> alSumCnt, RandomAccessibleInterval< FloatType > removedImage)
+	{
+		int i;
+		int nDim = alSumCnt.get(0).numDimensions();
+		long [] origin = alSumCnt.get(0).minAsLongArray();
+		final Img<FloatType> avrgImgArr = ArrayImgs.floats(alSumCnt.get(0).dimensionsAsLongArray());
+		final IntervalView<FloatType> avrgImg = Views.translate(avrgImgArr, origin );		
+		final IntervalView<FloatType> removeInt = Views.interval(Views.extendZero(removedImage), avrgImg);
+		Cursor<FloatType> avrgC = avrgImg.cursor();
+		Cursor<FloatType> remC = removeInt.cursor();
+		Cursor<FloatType> sumC = alSumCnt.get(0).cursor();
+		Cursor<FloatType> cntC = alSumCnt.get(1).cursor();
+		float fCnt, fRem, fSum;
+		while(avrgC.hasNext())
+		{
+			
+			avrgC.fwd();
+			remC.fwd();
+			sumC.fwd();
+			cntC.fwd();
+			fSum = sumC.get().get();
+			fRem = remC.get().get();
+			fCnt = cntC.get().get();
+			if(fRem>0.0f)
+			{
+				fSum-=fRem;
+				fCnt--;
+			}
+			
+			
+			if (fCnt>0.5f)
+			{
+				avrgC.get().set(fSum/fCnt);
+			}
+			else
+			{
+				avrgC.get().set(0.0f);
+			}
+		}
+		for(i=0;i<nDim;i++)
+		{
+			origin[i]*=-1;
+		}
+		
+		
+		return Views.translate(avrgImg, origin);
+		//return avrgImg;
 	}
 }

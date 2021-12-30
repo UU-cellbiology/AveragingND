@@ -71,7 +71,7 @@ public class GenNormCC {
 		long[] fftSize = new long[template.numDimensions()];
 		FFTMethods.dimensionsRealToComplexFast(new FinalDimensions(finDim), paddedDimensions, fftSize);
 		
-		System.out.println("done");
+		//System.out.println("done");
 		
 		//padded intervals
 		FinalInterval imgIntPad = (FinalInterval) FFTMethods.paddingIntervalCentered(image, new FinalDimensions(paddedDimensions));

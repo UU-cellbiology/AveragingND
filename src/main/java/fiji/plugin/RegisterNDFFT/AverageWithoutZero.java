@@ -223,12 +223,17 @@ public class AverageWithoutZero implements PlugIn {
 		Cursor<FloatType> avrgC = avrgImg.cursor();
 		Cursor<FloatType> sumC = alSumCnt.get(0).cursor();
 		Cursor<FloatType> cntC = alSumCnt.get(1).cursor();
+		float fCnt;
 		while(avrgC.hasNext())
 		{
 			avrgC.fwd();
 			sumC.fwd();
 			cntC.fwd();
-			avrgC.get().set(sumC.get().get()/cntC.get().get());
+			fCnt=cntC.get().get();
+			if(fCnt>0.0f)
+			{
+				avrgC.get().set(sumC.get().get()/fCnt);
+			}
 		}
 		
 		for(i=0;i<nDim;i++)
