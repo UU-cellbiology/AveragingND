@@ -1,9 +1,13 @@
 package fiji.plugin.RegisterNDFFT;
 
+import ij.ImagePlus;
+import ij.measure.Calibration;
 import net.imglib2.Cursor;
 import net.imglib2.IterableInterval;
 import net.imglib2.Point;
+import net.imglib2.RandomAccessibleInterval;
 import net.imglib2.img.Img;
+import net.imglib2.img.display.imagej.ImageJFunctions;
 import net.imglib2.type.Type;
 import net.imglib2.type.numeric.RealType;
 import net.imglib2.type.numeric.real.FloatType;
@@ -114,5 +118,34 @@ public class MiscUtils {
 			val = type.get();
 			type.setReal( val*val );
 		}
+	}
+	
+	/** assume there is no time axis **/
+	public static ImagePlus wrapFloatImgCal(RandomAccessibleInterval< FloatType > img, String sTitle, Calibration cal, boolean nCh)
+	{
+		ImagePlus outIP = ImageJFunctions.wrap(img,sTitle);
+		
+		
+		if(img.numDimensions()==3)
+		{
+			if(nCh)
+			{
+				outIP.setDimensions((int)img.dimension(2), 1 , 1);
+			}
+			else
+			{
+				outIP.setDimensions(1, (int)img.dimension(2), 1);
+			}
+		}
+		if(img.numDimensions()==4)
+		{
+			outIP.setDimensions((int)img.dimension(2), (int)img.dimension(3), 1);
+		}
+		if(cal!=null)
+		{
+			outIP.setCalibration(cal);
+		}
+		return outIP;
+		//outIP.show();
 	}
 }

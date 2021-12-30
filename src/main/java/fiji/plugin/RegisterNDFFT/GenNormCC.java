@@ -2,17 +2,19 @@ package fiji.plugin.RegisterNDFFT;
 
 import ij.IJ;
 import ij.ImagePlus;
+import ij.measure.Calibration;
 import net.imglib2.Cursor;
 import net.imglib2.Dimensions;
 import net.imglib2.FinalDimensions;
 import net.imglib2.FinalInterval;
 import net.imglib2.IterableInterval;
 import net.imglib2.Point;
+import net.imglib2.RandomAccessibleInterval;
 import net.imglib2.algorithm.fft2.FFT;
 import net.imglib2.algorithm.fft2.FFTMethods;
-import net.imglib2.converter.Converters;
 import net.imglib2.img.Img;
 import net.imglib2.img.ImgFactory;
+import net.imglib2.img.ImgView;
 import net.imglib2.img.array.ArrayImg;
 import net.imglib2.img.array.ArrayImgFactory;
 import net.imglib2.img.array.ArrayImgs;
@@ -27,25 +29,33 @@ public class GenNormCC {
 	
 	
 	/** dimensionality of images **/	
-	//int nDim;
+	private int nDim;
+	/** maximum of norm cross-correlation coefficient **/	
+	public double dMaxCC;
+	
+	/** final shift of the template to be aligned (corresponding to CC max) **/
+	public long [] dShift;
+	
 	
 	/**
 	 * @param image
 	 * @param template
 	 */
-	public static void caclulateGenNormCC(final Img< FloatType > image, final Img< FloatType > template, double max_fraction_shift, boolean bShowCC) //throws ImgIOException, IncompatibleTypeException
+	public boolean caclulateGenNormCC(final RandomAccessibleInterval< FloatType > image, final RandomAccessibleInterval< FloatType > template, final double max_fraction_shift, final boolean bShowCC)//, boolean bRegisterTemplate) //throws ImgIOException, IncompatibleTypeException	
 	{
 		int i;
-		int nDim;
+		
+		//double [] finData;
 		
 		
 		if(image.numDimensions()!=template.numDimensions())
 		{
 			IJ.log("different dimensions of input and template!");
-			return;
+			return false;
 		}
 		
 		nDim = image.numDimensions();
+		dShift = new long [nDim];
 		long [] imgDim = new long[nDim];
 		long [] temDim = new long[nDim];
 		image.dimensions(imgDim);
@@ -74,8 +84,9 @@ public class GenNormCC {
 		//ImageJFunctions.show(padTem).setTitle( "padded2" );
 		
 		//unity images
-		ArrayImg<FloatType, FloatArray> unityImg = ArrayImgs.floats(imgDim);
-		ArrayImg<FloatType, FloatArray> unityTem = ArrayImgs.floats(temDim);
+		final ArrayImg<FloatType, FloatArray> unityImg = ArrayImgs.floats(imgDim);
+		final ArrayImg<FloatType, FloatArray> unityTem = ArrayImgs.floats(temDim);
+
 		unityImg.forEach(t->t.set(1.0f));
 		unityTem.forEach(t->t.set(1.0f));
 
@@ -86,8 +97,8 @@ public class GenNormCC {
 		//ImageJFunctions.show(padUnitTem).setTitle( "unipadded2" );
 	
 		//squared image values
-		Img< FloatType > sqImg = image.copy();
-		Img< FloatType > sqTem = template.copy();
+		Img< FloatType > sqImg = ImgView.wrap(image).copy();
+		Img< FloatType > sqTem = ImgView.wrap(template).copy();
 		
 		sqImg.forEach(t-> t.mul(t.get()));
 		sqTem.forEach(t-> t.mul(t.get()));
@@ -145,40 +156,12 @@ public class GenNormCC {
 		//ImageJFunctions.show(invF1F1I2).setTitle( "term1" );
 		//ImageJFunctions.show(invI1F2F2).setTitle( "term2" );
 
-		/*
-		final Cursor< FloatType > cursFl1 = invF1F2.cursor();
-		final Cursor< FloatType > cursFl2 = invF1F1I2.cursor();
-		final Cursor< FloatType > cursFl3 = invI1F2F2.cursor();
-
-		double tol = 1E-5;
-		while(cursFl1.hasNext())
-		{
-			cursFl1.fwd();
-			cursFl2.fwd();
-			cursFl3.fwd();
-			
-			t2=cursFl2.get().get();
-			t3=cursFl3.get().get();
-			t2= (float)Math.sqrt(t2*t3);
-			if(t2>tol)
-			{
-				cursFl1.get().mul(1.0f/t2);
-			}
-			else
-			{
-				cursFl1.get().set(0.0f);
-			}
-			//debug
-			//cursFl2.get().set(t2);
-		}
-		*/
 		
 		
 		final Cursor< FloatType > denom1 = invF1F1I2.cursor();
 		final Cursor< FloatType > denom2 = invI1F2F2.cursor();
 		float maxVal = Float.MIN_VALUE;
 		float t2, t3;
-		
 		
 		//calculate denominator and its max value
 		//to estimate precision later
@@ -206,7 +189,7 @@ public class GenNormCC {
 			denomCurs.fwd();
 			
 			t2 = denomCurs.get().get();
-			
+			//check if the value within precision tolerance
 			if(t2>tol)
 			{
 				numCurs.get().mul(1.0f/t2);
@@ -219,16 +202,38 @@ public class GenNormCC {
 		
 		
 		long [][] cropCorr = new long[2][nDim];
+
+		//determine the maximum shift of template with respect to original image,
+		//assuming that for both images' origin of coordinates are in top left corner 
 		for(i=0;i<nDim;i++)
 		{
 			cropCorr[0][i]=Math.round((-1)*((temDim[i]-1)*max_fraction_shift));
-			cropCorr[1][i]=Math.round((imgDim[i]-1)*max_fraction_shift);
-	
+			cropCorr[1][i]=Math.round((imgDim[i]-1)*max_fraction_shift);	
 		}
 		FinalInterval interval = new FinalInterval( cropCorr[0] ,  cropCorr[1] );
-		IntervalView< FloatType > ivCCswapped = Views.interval( Views.extendPeriodic( invF1F2 ),interval);
+
+		//Now we need to account for the padding. Since it is changing the origin
+		//of coordinates of template with respect to the original image
+		long [] nCCOrigin = new long [nDim];
+		for(i=0;i<nDim;i++)
+		{
+			nCCOrigin[i]=(long) (Math.ceil(0.5*(imgDim[i]))- Math.ceil(0.5*(temDim[i]))); 
+		}
+		
+		//In addition, here we do so called FFT "swap quadrants" procedure (or FFT shift)
+		//to show frequencies centered/radial. So we can have negative shifts, etc
+		//Instead of truly swapping the quadrants we just periodically mirror them (extend periodic)
+		
+		IntervalView< FloatType > ivCCswapped =  Views.interval(Views.translate(Views.extendPeriodic( invF1F2 ), nCCOrigin),interval);
+		//IntervalView< FloatType > ivCCswapped =  Views.interval(Views.extendPeriodic( invF1F2 ),interval);
+		
+
 		if(bShowCC)
 		{
+			//ImagePlus outIP = ImageJFunctions.wrap(ivCCswapped,"General cross-correlation");
+			//Calibration cal = outIP.getCalibration();
+			//cal.xOrigin = 
+			//outIP.show();
 			ImageJFunctions.show(ivCCswapped).setTitle( "General cross-correlation" );
 		}
 		//ImageJFunctions.show(Views.interval( Views.extendPeriodic( invF1F1I2 ),interval)).setTitle( "Denominator" );
@@ -248,20 +253,12 @@ public class GenNormCC {
 		sOutput=sOutput+")\nMaximum normalized cross-correlation value: "+Float.toString(fCCvalue.get());
 		IJ.log(sOutput);
 		
-		/** final shift of images **/
-		long [] shift_pos = new long [nDim];
-		//final shift
-		shift.localize(shift_pos);
-		
-		ImagePlus registeredT = ImageJFunctions.wrap(Views.interval(Views.translate(Views.extendZero(template), shift_pos),image),"GNCC registered_template");
-		if(nDim>2)
-		{
-			registeredT.setDimensions(1, (int)ivCCswapped.dimension(2), 1);
-		}
-		registeredT.show();
-			
-		
-		
+		// final shift of images 
+		shift.localize(dShift);
+		// max of cross-correlation
+		dMaxCC = fCCvalue.get();
+
+		return true;
 	}
 	
 	public static void calcTermNum(final Img< FloatType > im1, final Img< FloatType > im2,final Img< FloatType > im3, final Img< FloatType > im4)
