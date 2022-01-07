@@ -154,7 +154,7 @@ public class IterativeAveraging implements PlugIn {
 		double oldAvrgCC = -100.0;
 		
 		boolean bConverged = false;
-		
+		IJ.showStatus("Iterative averaging...");
 		IJ.showProgress(0, (nIterN)*(nImageN-1));
 		for(iter=0;(iter<nIterN && !bConverged);iter++)
 		{
@@ -204,6 +204,7 @@ public class IterativeAveraging implements PlugIn {
 			{
 				bConverged = true;
 				iter--;
+				IJ.log("Converged before reaching the final iteration number");
 			}
 			else
 			{
@@ -212,7 +213,8 @@ public class IterativeAveraging implements PlugIn {
 			}
 
 		}
-		IJ.showProgress((nIterN-1)*(nImageN),(nIterN)*(nImageN-1));
+		IJ.showStatus("Iterative averaging...done");
+		IJ.showProgress(2,2);
 		ptable.show("Results");
 		ptableCC.show("Average CC");
 		if(!bMultiCh)
