@@ -38,6 +38,7 @@ public class RegisterNDFFT implements PlugIn
 	public int regChannel1 =0;
 	public int regChannel2 =0;
 	public boolean multiCh = false;
+	public boolean bExcludeZeros = false;
 
 	@Override
 	public void run(String arg) {
@@ -71,10 +72,11 @@ public class RegisterNDFFT implements PlugIn
 		}
 		
 		gd1.addChoice("First_image (reference)", imgList, imgList[ defaultImg1 ] );
-		gd1.addChoice("Second_image (to register)", imgList, imgList[ defaultImg2 ] );
+		gd1.addChoice("Second_image (template)", imgList, imgList[ defaultImg2 ] );
 		gd1.addNumericField("Maximum shift (fraction, 0-1 range)", Prefs.get("RegisterNDFFT.dMaxFraction", 0.5), 3);
-		gd1.addCheckbox("Show cross-correlation", Prefs.get("RegisterNDFFT.bShowCC", false));
-		gd1.addCheckbox("Register template", Prefs.get("RegisterNDFFT.bRegisterTemplate", false));
+		gd1.addCheckbox("Exclude zero values?", Prefs.get("RegisterNDFFT.bExcludeZeros", false));		
+		gd1.addCheckbox("Show cross-correlation?", Prefs.get("RegisterNDFFT.bShowCC", false));
+		gd1.addCheckbox("Register template?", Prefs.get("RegisterNDFFT.bRegisterTemplate", false));
 				
 		gd1.showDialog();
 		
@@ -87,6 +89,8 @@ public class RegisterNDFFT implements PlugIn
 		
 		dMaxFraction  = gd1.getNextNumber();
 		Prefs.set("RegisterNDFFT.dMaxFraction", dMaxFraction);
+		bExcludeZeros  = gd1.getNextBoolean();
+		Prefs.set("RegisterNDFFT.bExcludeZeros", bExcludeZeros);
 		bShowCC  = gd1.getNextBoolean();
 		Prefs.set("RegisterNDFFT.bShowCC", bShowCC);
 		bRegisterTemplate  = gd1.getNextBoolean();
@@ -114,7 +118,7 @@ public class RegisterNDFFT implements PlugIn
 			final GenericDialog gd2 = new GenericDialog( "Register multichannel" );
 
 			gd2.addChoice( "Reference_image_channel", channels1, channels1[ 0 ] );
-			gd2.addChoice( "Registered_image_channel", channels2, channels2[ 0 ] );
+			gd2.addChoice( "Template_image_channel", channels2, channels2[ 0 ] );
 			gd2.showDialog();
 
 			if ( gd2.wasCanceled() )
@@ -127,6 +131,8 @@ public class RegisterNDFFT implements PlugIn
 		final Img< FloatType > image_in = ImagePlusAdapter.convertFloat(imp1);
 		final Img< FloatType > template_in = ImagePlusAdapter.convertFloat(imp2);
 		GenNormCC normCC = new GenNormCC();
+		normCC.bExcludeZeros=bExcludeZeros;
+		
 		boolean bNormCCcalc=false;
 		if(multiCh)
 		{	

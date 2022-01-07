@@ -41,6 +41,7 @@ public class IterativeAveraging implements PlugIn {
 	public boolean bMultiCh = false;
 	public int nIniTemplate = 0;
 	public int nInput = 0;
+	public boolean bExcludeZeros = false;
 	
 	public int numChannels = 1;
 	
@@ -78,6 +79,7 @@ public class IterativeAveraging implements PlugIn {
 		gd.addChoice( "Input images:", sInput, Prefs.get("RegisterNDFFT.IA.nInput", sInput[0]) );
 		gd.addChoice( "Initial template:", sIniTemplate, Prefs.get("RegisterNDFFT.IA.nIniTemplate", sIniTemplate[0]) );
 		gd.addNumericField("Number of iterations", Prefs.get("RegisterNDFFT.IA.nIterN",10),0);
+		gd.addCheckbox("Exclude zero values?", Prefs.get("RegisterNDFFT.IA.bExcludeZeros", false));	
 		gd.addNumericField("Maximum shift (fraction, 0-1 range)", Prefs.get("RegisterNDFFT.IA.dMaxFraction", 0.4), 3);
 		gd.addCheckbox("Show intermediate average", Prefs.get("RegisterNDFFT.IA.bShowIntermediateAverage",false));
 		gd.showDialog();
@@ -91,6 +93,8 @@ public class IterativeAveraging implements PlugIn {
 		Prefs.set("RegisterNDFFT.IA.nIniTemplate", sIniTemplate[nIniTemplate]);
 		nIterN  = (int)gd.getNextNumber();
 		Prefs.set("RegisterNDFFT.IA.nIterN", nIterN);
+		bExcludeZeros  = gd.getNextBoolean();
+		Prefs.set("RegisterNDFFT.IA.bExcludeZeros", bExcludeZeros);
 		dMaxFraction  = gd.getNextNumber();
 		Prefs.set("RegisterNDFFT.IA.dMaxFraction", dMaxFraction);
 		bShowIntermediateAverage = gd.getNextBoolean();
@@ -136,6 +140,7 @@ public class IterativeAveraging implements PlugIn {
 		
 		GenNormCC normCC = new GenNormCC();
 		normCC.bVerbose = false;
+		normCC.bExcludeZeros=bExcludeZeros;
 
 		ResultsTable ptable = ResultsTable.getResultsTable();
 		ptable.reset();
@@ -418,7 +423,7 @@ public class IterativeAveraging implements PlugIn {
 			//IJ.log(sPath);
 			try {
 
-				files = findFiles(Paths.get(sPath), "tif");
+				files = MiscUtils.findFiles(Paths.get(sPath), "tif");
 				//files.forEach(x -> IJ.log(x));
 			} catch (IOException e) {
 				e.printStackTrace();
@@ -486,27 +491,5 @@ public class IterativeAveraging implements PlugIn {
 		return true;
 	}
 	
-    public static List<String> findFiles(Path path, String fileExtension)
-            throws IOException {
 
-            if (!Files.isDirectory(path)) {
-                throw new IllegalArgumentException("Path must be a directory!");
-            }
-
-            List<String> result;
-
-            try (Stream<Path> walk = Files.walk(path)) {
-                result = walk
-                        .filter(p -> !Files.isDirectory(p))
-                        // this is a path, not string,
-                        // this only test if path end with a certain path
-                        //.filter(p -> p.endsWith(fileExtension))
-                        // convert path to string first
-                        .map(p -> p.toString())
-                        .filter(f -> f.endsWith(fileExtension))
-                        .collect(Collectors.toList());
-            }
-
-            return result;
-        }
 }

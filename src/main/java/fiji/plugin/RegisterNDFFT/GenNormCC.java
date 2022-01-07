@@ -39,6 +39,10 @@ public class GenNormCC {
 	/** whether to log results to IJ.log window **/
 	public boolean bVerbose = true;
 	
+	/** **/
+	
+	public boolean bExcludeZeros = false;
+	
 	
 	/** 
 	 * @param image
@@ -90,9 +94,48 @@ public class GenNormCC {
 		final ArrayImg<FloatType, FloatArray> unityImg = ArrayImgs.floats(imgDim);
 		final ArrayImg<FloatType, FloatArray> unityTem = ArrayImgs.floats(temDim);
 
-		unityImg.forEach(t->t.set(1.0f));
-		unityTem.forEach(t->t.set(1.0f));
-
+		if(!bExcludeZeros)
+		{
+			unityImg.forEach(t->t.set(1.0f));
+			unityTem.forEach(t->t.set(1.0f));
+		}
+		else
+		{
+			//reference image
+			Cursor< FloatType > unC = unityImg.cursor();
+			IntervalView< FloatType > intImg = Views.interval(image,image);
+			Cursor< FloatType > inC = intImg.cursor();
+			while(unC.hasNext())
+			{
+				unC.fwd();
+				inC.fwd();
+				if(inC.get().get()==0.0f)
+				{
+					unC.get().set(0.0f);
+				}
+				else
+				{
+					unC.get().set(1.0f);
+				}
+			}
+			//template image
+			unC = unityTem.cursor();
+			intImg = Views.interval(template,template);
+			inC = intImg.cursor();
+			while(unC.hasNext())
+			{
+				unC.fwd();
+				inC.fwd();
+				if(inC.get().get()==0.0f)
+				{
+					unC.get().set(0.0f);
+				}
+				else
+				{
+					unC.get().set(1.0f);
+				}
+			}
+		}
 		//padded unity images
 		IntervalView< FloatType > padUnitImg = Views.interval(Views.extendZero(unityImg),imgIntPad);
 		IntervalView< FloatType > padUnitTem = Views.interval(Views.extendZero(unityTem),temIntPad);
