@@ -36,8 +36,11 @@ public class GenNormCC {
 	/** final shift of the template to be aligned (corresponding to CC max) **/
 	public long [] dShift;
 	
+	/** whether to log results to IJ.log window **/
+	public boolean bVerbose = true;
 	
-	/**
+	
+	/** 
 	 * @param image
 	 * @param template
 	 */
@@ -204,11 +207,17 @@ public class GenNormCC {
 		long [][] cropCorr = new long[2][nDim];
 
 		//determine the maximum shift of template with respect to original image,
-		//assuming that for both images' origin of coordinates are in top left corner 
+		//assuming that zero shift is when both images' are centered 
+		double nHalfSpan, nCenter;
 		for(i=0;i<nDim;i++)
 		{
-			cropCorr[0][i]=Math.round((-1)*((temDim[i]-1)*max_fraction_shift));
-			cropCorr[1][i]=Math.round((imgDim[i]-1)*max_fraction_shift);	
+			nHalfSpan = 0.5*((temDim[i]-1)+(imgDim[i]-1));
+			nCenter = nHalfSpan-(temDim[i]-1);
+			cropCorr[0][i]=Math.round(nCenter-nHalfSpan*max_fraction_shift);
+			cropCorr[1][i]=Math.round(nCenter+nHalfSpan*max_fraction_shift);	
+			
+			//cropCorr[0][i]=Math.round((-1)*((temDim[i]-1)*max_fraction_shift));
+			//cropCorr[1][i]=Math.round((imgDim[i]-1)*max_fraction_shift);	
 		}
 		FinalInterval interval = new FinalInterval( cropCorr[0] ,  cropCorr[1] );
 
@@ -243,15 +252,18 @@ public class GenNormCC {
 		Point shift = new Point(nDim);
 		FloatType fCCvalue = MiscUtils.computeMaxLocation(ivCCswapped,shift);
 		
-		
-		String sOutput = "Translation for template to overlap with image (px):\n("+Integer.toString(shift.getIntPosition(0))  ;
-		for(i=1;i<nDim;i++)
+		if (bVerbose)
 		{
-			sOutput = sOutput +", " +Integer.toString(shift.getIntPosition(i));
-			//IJ.log("dim "+Integer.toString(i)+": "+Integer.toString(shift.getIntPosition(i)));
+			String sOutput = "Translation for template to overlap with image (px):\n("+Integer.toString(shift.getIntPosition(0))  ;
+			for(i=1;i<nDim;i++)
+			{
+				sOutput = sOutput +", " +Integer.toString(shift.getIntPosition(i));
+				//IJ.log("dim "+Integer.toString(i)+": "+Integer.toString(shift.getIntPosition(i)));
+			}
+			
+			sOutput=sOutput+")\nMaximum normalized cross-correlation value: "+Float.toString(fCCvalue.get());
+			IJ.log(sOutput);
 		}
-		sOutput=sOutput+")\nMaximum normalized cross-correlation value: "+Float.toString(fCCvalue.get());
-		IJ.log(sOutput);
 		
 		// final shift of images 
 		shift.localize(dShift);

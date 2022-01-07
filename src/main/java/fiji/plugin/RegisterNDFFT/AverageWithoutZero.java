@@ -142,13 +142,8 @@ public class AverageWithoutZero implements PlugIn {
 			{
 				avC.get().set(nVal/nNum);
 			}
-		}
-		for(i=0;i<nDim;i++)
-		{
-			originCoord[i]*=-1;
-		}
-		
-		return 	Views.translate(averageImg, originCoord);
+		}	
+		return 	Views.zeroMin(averageImg);
 
 	}
 	
@@ -215,8 +210,7 @@ public class AverageWithoutZero implements PlugIn {
 	
 	public static IntervalView<FloatType> averageFromSumAndCount(ArrayList<IntervalView<FloatType>> alSumCnt)
 	{
-		int nDim = alSumCnt.get(0).numDimensions();
-		int i;
+
 		long [] origin = alSumCnt.get(0).minAsLongArray();
 		final Img<FloatType> avrgImgArr = ArrayImgs.floats(alSumCnt.get(0).dimensionsAsLongArray());
 		final IntervalView<FloatType> avrgImg = Views.translate(avrgImgArr, origin );
@@ -234,14 +228,8 @@ public class AverageWithoutZero implements PlugIn {
 			{
 				avrgC.get().set(sumC.get().get()/fCnt);
 			}
-		}
+		}				
 		
-		for(i=0;i<nDim;i++)
-		{
-			origin[i]*=-1;
-		}
-		
-		
-		return Views.translate(avrgImg, origin);
+		return Views.zeroMin(avrgImg);
 	}
 }

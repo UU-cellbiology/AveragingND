@@ -1,18 +1,27 @@
 package fiji.plugin.RegisterNDFFT;
 
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.util.ArrayList;
+import java.util.List;
+import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 import ij.IJ;
 import ij.ImagePlus;
 import ij.Prefs;
 import ij.WindowManager;
 import ij.gui.GenericDialog;
+import ij.io.DirectoryChooser;
 import ij.measure.Calibration;
 import ij.measure.ResultsTable;
 import ij.plugin.PlugIn;
+import io.scif.config.SCIFIOConfig;
+import io.scif.config.SCIFIOConfig.ImgMode;
+import io.scif.img.ImgOpener;
 import net.imglib2.Cursor;
-import net.imglib2.FinalInterval;
-import net.imglib2.RandomAccess;
 import net.imglib2.RandomAccessibleInterval;
 import net.imglib2.img.ImagePlusAdapter;
 import net.imglib2.img.Img;
@@ -24,55 +33,62 @@ import net.imglib2.view.Views;
 
 public class IterativeAveraging implements PlugIn {
 
-	public int nIterN;
-	public int nImageN;
+	public int nIterN = 0;
+	public int nImageN = 0;
 	public double dMaxFraction = 0.5;
 	public int alignChannel = 1;
 	public boolean bShowIntermediateAverage=false;
 	public boolean bMultiCh = false;
+	public int nIniTemplate = 0;
+	public int nInput = 0;
+	
+	public int numChannels = 1;
+	
+	/** original images (with full channels) **/
+	ArrayList<RandomAccessibleInterval< FloatType >> imgs_multiCh;
+	
+	/** only channel used for alignment **/
+	ArrayList<RandomAccessibleInterval< FloatType >> imgs;
+	
+	/** shifted images for average calculation**/
+	ArrayList<RandomAccessibleInterval< FloatType >> imgs_shift;
+	
+	/** shift of each image **/
+	ArrayList<long []> shifts;
+	
+	Calibration calibInput;
 	
 	@Override
 	public void run(String paramString) {
 		// TODO Auto-generated method stub
-		int i,j,k, iter;
-		int nDim;
-		//this part is honestly stolen from "Pairwise Stitching" plugin
-		//https://github.com/fiji/Stitching/blob/master/src/main/java/plugin/Stitching_Pairwise.java
-		// get list of image stacks
-		final int[] idList = WindowManager.getIDList();		
-
-		if ( idList == null || idList.length < 2 )
-		{
-			IJ.error( "You need at least two open images." );
-			return;
-		}
+		int i,k, iter;
+	
 		
-		// create channel selector		
-		ImagePlus imp = WindowManager.getImage( idList[0] );		
-		final int numChannels = imp.getNChannels();
-		final String[] channels = new String[ numChannels ];
+		final String[] sIniTemplate = new String[3];
+		sIniTemplate[0] = "Average (center)";
+		sIniTemplate[1] = "Average (top-left)";
+		sIniTemplate[2] = "Least squares (pairwise)";
+		
+		final String[] sInput = new String[2];
+		sInput[0] = "All currently open images";
+		sInput[1] = "Specify images in a folder";
 		
 		final GenericDialog gd = new GenericDialog( "Iterative registration" );
-		if(numChannels>1)
-		{
-			bMultiCh = true;
-			for ( int c = 0; c < channels.length; ++c )
-				channels[ c ] = "use channel " + Integer.toString(c+1);
-			gd.addChoice( "For alignment", channels, channels[ 0 ] );
-		}
 
+		gd.addChoice( "Input images:", sInput, Prefs.get("RegisterNDFFT.IA.nInput", sInput[0]) );
+		gd.addChoice( "Initial template:", sIniTemplate, Prefs.get("RegisterNDFFT.IA.nIniTemplate", sIniTemplate[0]) );
 		gd.addNumericField("Number of iterations", Prefs.get("RegisterNDFFT.IA.nIterN",10),0);
 		gd.addNumericField("Maximum shift (fraction, 0-1 range)", Prefs.get("RegisterNDFFT.IA.dMaxFraction", 0.4), 3);
 		gd.addCheckbox("Show intermediate average", Prefs.get("RegisterNDFFT.IA.bShowIntermediateAverage",false));
 		gd.showDialog();
 		
 		if ( gd.wasCanceled() )
-			return;
-		
-		if(bMultiCh)
-		{
-			alignChannel = gd.getNextChoiceIndex();
-		}
+			return;				
+
+		nInput = gd.getNextChoiceIndex();
+		Prefs.set("RegisterNDFFT.IA.nInput", sInput[nInput]);
+		nIniTemplate = gd.getNextChoiceIndex();
+		Prefs.set("RegisterNDFFT.IA.nIniTemplate", sIniTemplate[nIniTemplate]);
 		nIterN  = (int)gd.getNextNumber();
 		Prefs.set("RegisterNDFFT.IA.nIterN", nIterN);
 		dMaxFraction  = gd.getNextNumber();
@@ -81,72 +97,70 @@ public class IterativeAveraging implements PlugIn {
 		Prefs.set("RegisterNDFFT.IA.bShowIntermediateAverage", bShowIntermediateAverage);
 
 		
-		ArrayList<RandomAccessibleInterval< FloatType >> imgs_multiCh = new ArrayList<RandomAccessibleInterval< FloatType >>();
-		/** original images (or channels of images) **/
-		ArrayList<RandomAccessibleInterval< FloatType >> imgs = new ArrayList<RandomAccessibleInterval< FloatType >>();
-		/** shifted images for average calculation**/
-		ArrayList<RandomAccessibleInterval< FloatType >> imgs_shift = new ArrayList<RandomAccessibleInterval< FloatType >>();
-		//ArrayList<IntervalView< FloatType >> imgs_shift = new ArrayList<IntervalView< FloatType >>();
-		/** shift of each image **/
-		ArrayList<long []> shifts = new ArrayList<long[]>();
-		nImageN=idList.length;
+		//init image arrays		
+		imgs_multiCh = new ArrayList<RandomAccessibleInterval< FloatType >>();
+		imgs = new ArrayList<RandomAccessibleInterval< FloatType >>();		
+		imgs_shift = new ArrayList<RandomAccessibleInterval< FloatType >>();
+		shifts = new ArrayList<long []>();
 		
-		Calibration cal;
-		for(i=0;i<nImageN;i++)
+		if(nInput ==0)
 		{
-			if(!bMultiCh)
-			{
-				imgs.add(ImagePlusAdapter.convertFloat(WindowManager.getImage(idList[i])));
-			}
-			else
-			{
-				imgs_multiCh.add(ImagePlusAdapter.convertFloat(WindowManager.getImage(idList[i])));
-				imgs.add(Views.hyperSlice(imgs_multiCh.get(i),2,alignChannel));
-			}
-			shifts.add(new long [imgs.get(0).numDimensions()]);
-			//imgs_shift.add(Views.translate(imgs.get(i),shifts.get(i)));
-			imgs_shift.add(imgs.get(i));
+			 if(!loadAllOpenImages())
+				 return;			 
 		}
-		nDim = imgs.get(0).numDimensions();
-		cal=WindowManager.getImage(idList[0]).getCalibration();
+		else
+		{
+			if(!loadFolderTiff())
+				return;
+		}
+		
+		
+		//determine initial template
+		if(nIniTemplate==0)
+		{
+			shifts = centeredShifts(imgs);
+		}
+		//create a new shifted array of images
+		buildShiftedIntervals(imgs, imgs_shift,shifts);
+		
+		
 		
 		ArrayList<IntervalView<FloatType>> sumAndCount = null;
-		sumAndCount = AverageWithoutZero.sumAndCountArray(imgs);
-		//IntervalView<FloatType> averageImg = AverageWithoutZero.averageArray(imgs);
-		//IntervalView<FloatType> averageImg = null;// AverageWithoutZero.averageArray(imgs);
-		IntervalView<FloatType> currAverageImg;// = AverageWithoutZero.averageArray(imgs);
+		sumAndCount = AverageWithoutZero.sumAndCountArray(imgs_shift);
+
+		IntervalView<FloatType> currAverageImg;
 		if(bShowIntermediateAverage)
-		{
-			//MiscUtils.wrapFloatImgCal(averageImg, "average 0",cal, false).show();
-			
-			MiscUtils.wrapFloatImgCal(AverageWithoutZero.averageFromSumAndCount(sumAndCount), "average 0",cal, false).show();
+		{		
+			MiscUtils.wrapFloatImgCal(AverageWithoutZero.averageFromSumAndCount(sumAndCount), "average iteration 0", calibInput, false).show();
 		}
 		
 		GenNormCC normCC = new GenNormCC();
-		double avrgCC;
+		normCC.bVerbose = false;
+
 		ResultsTable ptable = ResultsTable.getResultsTable();
+		ptable.reset();
 		ResultsTable ptableCC = new ResultsTable();
 		ptableCC.setPrecision(8);
+		
+		double avrgCC;
 		double cumShift=0.0;
-		double nCurrShift=0.0;
+		
+		double oldCumShift = -1.0;
+		double oldAvrgCC = -100.0;
+		
+		boolean bConverged = false;
+		
 		IJ.showProgress(0, (nIterN)*(nImageN-1));
-		for(iter=0;iter<nIterN;iter++)
+		for(iter=0;(iter<nIterN && !bConverged);iter++)
 		{
-
+			IJ.showStatus("Averaging iteration "+Integer.toString(iter)+"...");
 			avrgCC=0.0;
 			
 			for(i=0;i<nImageN;i++)
 			{
-				//TODO: proper subtraction
-				//currAverageImg = subtractFromAverage(averageImg,imgs_shift.get(i));
+				//remove current image from the average
 				currAverageImg = removeOneAverage(sumAndCount,imgs_shift.get(i));
-				if(iter>=5 && i ==1)
-				{
-					ImageJFunctions.show(currAverageImg).setTitle( "currAver" + Integer.toString(iter+1));
-					ImageJFunctions.show(sumAndCount.get(0)).setTitle( "sum" + Integer.toString(iter+1));
-					ImageJFunctions.show(sumAndCount.get(1)).setTitle( "count" + Integer.toString(iter+1));
-				}
-				//long [] valx =currAverageImg.minAsLongArray(); 
+
 				normCC.caclulateGenNormCC(currAverageImg, imgs.get(i), dMaxFraction , false);
 				ptable.incrementCounter();
 				ptable.addValue("iter", iter+1);
@@ -161,31 +175,35 @@ public class IterativeAveraging implements PlugIn {
 				avrgCC+=normCC.dMaxCC;
 				IJ.showProgress(iter*(nImageN-1)+i,(nIterN)*(nImageN-1));
 			}
-			cumShift=0.0;
 			
-			for(i=0;i<nImageN;i++)
-			{
-				imgs_shift.set(i,Views.translate(imgs.get(i),shifts.get(i)));
-				
-				//estimate total displacement
-				nCurrShift = 0.0;
-				for(j=0;j<nDim;j++)
-				{
-					nCurrShift += shifts.get(i)[j]*shifts.get(i)[j];
-				}
-				cumShift+=Math.sqrt(nCurrShift);
-			}
+			// calculate new img array with applied displacements			
+			cumShift= buildShiftedIntervals(imgs, imgs_shift,shifts);
+			//new average (sum and count)
+			sumAndCount = AverageWithoutZero.sumAndCountArray(imgs_shift);
+			
 			avrgCC=avrgCC/nImageN;
 			ptableCC.incrementCounter();
 			ptableCC.addValue("iter", iter+1);
 			ptableCC.addValue("averCC", avrgCC);
 			ptableCC.addValue("cumShift", cumShift);
 			IJ.log("Iteration "+Integer.toString(iter+1)+" average CC " +Double.toString(avrgCC));
-			sumAndCount = AverageWithoutZero.sumAndCountArray(imgs_shift);
+			
 			//averageImg = AverageWithoutZero.averageArray(imgs_shift);
 			if(bShowIntermediateAverage)
 			{
-				MiscUtils.wrapFloatImgCal(AverageWithoutZero.averageFromSumAndCount(sumAndCount),"average iteration "+Integer.toString(iter+1),cal, false).show();
+				MiscUtils.wrapFloatImgCal(AverageWithoutZero.averageFromSumAndCount(sumAndCount),"average iteration "+Integer.toString(iter+1),calibInput, false).show();
+			}
+			
+			//check if it is converged already
+			if(Math.abs(oldAvrgCC - avrgCC)<0.000001 && Math.abs(oldCumShift - cumShift)<0.001)
+			{
+				bConverged = true;
+				iter--;
+			}
+			else
+			{
+				oldCumShift = cumShift;
+				oldAvrgCC = avrgCC;
 			}
 
 		}
@@ -194,14 +212,16 @@ public class IterativeAveraging implements PlugIn {
 		ptableCC.show("Average CC");
 		if(!bMultiCh)
 		{
-			MiscUtils.wrapFloatImgCal(AverageWithoutZero.averageFromSumAndCount(sumAndCount),"final average "+Integer.toString(iter+1),cal,false).show();
+			MiscUtils.wrapFloatImgCal(AverageWithoutZero.averageFromSumAndCount(sumAndCount),"final average "+Integer.toString(iter+1),calibInput,false).show();
 		}
 		else
 		{
-			showMultiChAverage(imgs_multiCh,shifts,"final average "+Integer.toString(iter+1),cal);
+			showMultiChAverage(imgs_multiCh,shifts,"final average "+Integer.toString(iter+1),calibInput);
 		}
 	}
 	
+	/** function calculating multi-channel average of imgs_multiCh given shifts 
+	 * and diplays it as a proper ImagePlus **/
 	void showMultiChAverage(final ArrayList<RandomAccessibleInterval< FloatType >> imgs_multiCh, final ArrayList<long []> shifts, String sTitle, Calibration cal)
 	{
 		int nDim = imgs_multiCh.get(0).numDimensions();
@@ -233,33 +253,11 @@ public class IterativeAveraging implements PlugIn {
 		MiscUtils.wrapFloatImgCal(averageImg,sTitle,cal,true).show();
 	}
 	
-	Img< FloatType > subtractFromAverage(RandomAccessibleInterval< FloatType > aver_image, RandomAccessibleInterval< FloatType > curr_image)
-	{
-		int nDim = aver_image.numDimensions();
-		// here is strong assumption that origin of coordinates is at 0
-		final Img<FloatType> finImg = ArrayImgs.floats(aver_image.dimensionsAsLongArray());
-		
-		RandomAccessibleInterval< FloatType > subImg = Views.interval(Views.extendZero(curr_image), aver_image);
-		RandomAccess<FloatType> raAver = aver_image.randomAccess();
-		RandomAccess<FloatType> raSub = subImg.randomAccess();
-		final Cursor< FloatType > finC = finImg.cursor();
-		long [] pos = new long [nDim]; 
-		while(finC.hasNext())
-		{
-			finC.fwd();
-			finC.localize(pos);
-			raAver.setPosition(pos);
-			raSub.setPosition(pos);
-			finC.get().set(raAver.get().get()-raSub.get().get());
-		}
-		
-		return finImg;
-	}
-	
+	/** given Sum and Count images alSumCnt, this function subtracts removedImage from Sum,
+	 * reduces corresponding Count voxels and returns averaged image (with coordinate origin at (0, 0, ..0) **/	
 	IntervalView<FloatType> removeOneAverage(ArrayList<IntervalView<FloatType>> alSumCnt, RandomAccessibleInterval< FloatType > removedImage)
 	{
-		int i;
-		int nDim = alSumCnt.get(0).numDimensions();
+	
 		long [] origin = alSumCnt.get(0).minAsLongArray();
 		final Img<FloatType> avrgImgArr = ArrayImgs.floats(alSumCnt.get(0).dimensionsAsLongArray());
 		final IntervalView<FloatType> avrgImg = Views.translate(avrgImgArr, origin );		
@@ -283,8 +281,7 @@ public class IterativeAveraging implements PlugIn {
 			{
 				fSum-=fRem;
 				fCnt--;
-			}
-			
+			}		
 			
 			if (fCnt>0.5f)
 			{
@@ -295,13 +292,221 @@ public class IterativeAveraging implements PlugIn {
 				avrgC.get().set(0.0f);
 			}
 		}
-		for(i=0;i<nDim;i++)
+				
+		return Views.zeroMin(avrgImg);
+	}
+	
+	
+	/** given input image array imgs_in and shifts, generates corresponding array of applied shifted interval views imgs_out **/
+	public double buildShiftedIntervals(final ArrayList<RandomAccessibleInterval< FloatType >> imgs_in, final ArrayList<RandomAccessibleInterval< FloatType >> imgs_out, final ArrayList<long []> shifts)
+	{
+		// calculate new displacements
+		double cumShift=0.0;
+		double nCurrShift = 0.0;
+		int i,j;
+		int nDim = shifts.get(0).length;
+		imgs_out.clear();
+		for(i=0;i<imgs_in.size();i++)
 		{
-			origin[i]*=-1;
+			imgs_out.add(i,Views.translate(imgs_in.get(i),shifts.get(i)));
+			
+			//estimate total displacement
+			nCurrShift = 0.0;
+			for(j=0;j<nDim;j++)
+			{
+				nCurrShift += shifts.get(i)[j]*shifts.get(i)[j];
+			}
+			cumShift+=Math.sqrt(nCurrShift);
+		}
+		return cumShift;
+	}
+	/** function generates shifts so all images are centered (+/- one pixel) **/
+	public ArrayList<long []> centeredShifts(final ArrayList<RandomAccessibleInterval< FloatType >> imgs_in)
+	{
+		int nDim = imgs_in.get(0).numDimensions();
+		long [] currSize = imgs_in.get(0).dimensionsAsLongArray();
+		long [] currMin = imgs_in.get(0).minAsLongArray();
+		long [] currShift; 
+		ArrayList<long []> shifts = new ArrayList<long []> ();		
+		int i,j;
+		int nDisp;
+		for (i=0;i<imgs_in.size();i++)
+		{
+			imgs_in.get(i).dimensions(currSize);
+			imgs_in.get(i).min(currMin);
+			currShift = new long [nDim];
+			for(j=0;j<nDim;j++)
+			{
+				nDisp = -1*(int)Math.ceil(0.5*currSize[j]);
+				currShift[j] = nDisp-currMin[j];
+			}
+			shifts.add(currShift);
+		}		
+		return shifts;
+	}
+	/** function fills analysis arrays with images currently open in ImageJ **/
+	public boolean loadAllOpenImages()
+	{
+		int i;
+		final int[] idList = WindowManager.getIDList();		
+
+		if ( idList == null || idList.length < 2 )
+		{
+			IJ.error( "You need at least two open images." );
+			return false;
 		}
 		
 		
-		return Views.translate(avrgImg, origin);
-		//return avrgImg;
+		calibInput = WindowManager.getImage(idList[0]).getCalibration();		
+		nImageN=idList.length;
+		
+		numChannels = WindowManager.getImage( idList[0] ).getNChannels();
+		
+		if(numChannels>1)
+		{
+			bMultiCh = true;
+			final GenericDialog gdCh = new GenericDialog( "Choose registration channel" );
+			
+			final String[] channels = new String[ numChannels ];
+			for ( int c = 0; c < channels.length; ++c )
+				channels[ c ] = "use channel " + Integer.toString(c+1);
+			gdCh.addChoice( "For alignment", channels, channels[ 0 ] );
+			gdCh.showDialog();
+			
+			if ( gdCh.wasCanceled() )
+				return false;				
+
+			alignChannel = gdCh.getNextChoiceIndex();
+		}
+
+		for(i=0;i<nImageN;i++)
+		{
+			if(!bMultiCh)
+			{
+				imgs.add(ImagePlusAdapter.convertFloat(WindowManager.getImage(idList[i])));
+			}
+			else
+			{
+				imgs_multiCh.add(ImagePlusAdapter.convertFloat(WindowManager.getImage(idList[i])));
+				imgs.add(Views.hyperSlice(imgs_multiCh.get(i),2,alignChannel));
+			}
+			shifts.add(new long [imgs.get(0).numDimensions()]);
+		}
+		if(!bMultiCh)
+		{
+			IJ.log("Averaging "+ Integer.toString(nImageN) + " images.");
+		}
+		else
+		{
+			IJ.log("Averaging "+Integer.toString(nImageN) + " images with " + Integer.toString(numChannels) + " channels.");
+			IJ.log("Using channel "+Integer.toString(alignChannel+1) + " for alignment.");
+		}
+		return true;
 	}
+	
+	/** function opens folder with Tiff images and loads them to analysis arrays **/
+	public boolean loadFolderTiff()
+	{
+		
+		int i;
+		DirectoryChooser dc = new DirectoryChooser ( "Choose a folder with images.." );
+		String sPath = dc.getDirectory();
+		List<String> files;
+		if (sPath != null)
+		{
+			
+			//IJ.log(sPath);
+			try {
+
+				files = findFiles(Paths.get(sPath), "tif");
+				//files.forEach(x -> IJ.log(x));
+			} catch (IOException e) {
+				e.printStackTrace();
+				return false;
+            }
+			nImageN=files.size();
+			ImagePlus impBridge =IJ.openImage(files.get(0));
+			numChannels = impBridge.getNChannels();
+			calibInput =  impBridge.getCalibration();
+			
+			if(numChannels>1)
+			{
+				bMultiCh = true;
+				final GenericDialog gdCh = new GenericDialog( "Choose registration channel" );
+				
+				final String[] channels = new String[ numChannels ];
+				for ( int c = 0; c < channels.length; ++c )
+					channels[ c ] = "use channel " + Integer.toString(c+1);
+				gdCh.addChoice( "For alignment", channels, channels[ 0 ] );
+				gdCh.showDialog();
+				
+				if ( gdCh.wasCanceled() )
+					return false;				
+
+				alignChannel = gdCh.getNextChoiceIndex();
+			}
+			
+			IJ.showProgress(0, nImageN-1);
+			IJ.showStatus("Loading images..");		
+			for(i=0;i<nImageN;i++)
+			{
+				impBridge = IJ.openImage(files.get(i));
+			
+				if(!bMultiCh)
+				{
+					imgs.add(ImagePlusAdapter.convertFloat(impBridge));
+				}
+				else
+				{
+					imgs_multiCh.add(ImagePlusAdapter.convertFloat(impBridge));
+					imgs.add(Views.hyperSlice(imgs_multiCh.get(i),2,alignChannel));
+				}
+				shifts.add(new long [imgs.get(0).numDimensions()]);
+				IJ.showProgress(i, nImageN-1);
+			}
+			IJ.showProgress(2,2);
+			IJ.showStatus("Loading images..done.");	
+			if(!bMultiCh)
+			{
+				IJ.log("Averaging "+ Integer.toString(nImageN) + " images.");
+			}
+			else
+			{
+				IJ.log("Averaging "+Integer.toString(nImageN) + " images with " + Integer.toString(numChannels) + " channels.");
+				IJ.log("Using channel "+Integer.toString(alignChannel+1) + " for alignment.");
+			}
+		}
+		
+		else
+		{
+			return false;
+		}
+	
+		
+		return true;
+	}
+	
+    public static List<String> findFiles(Path path, String fileExtension)
+            throws IOException {
+
+            if (!Files.isDirectory(path)) {
+                throw new IllegalArgumentException("Path must be a directory!");
+            }
+
+            List<String> result;
+
+            try (Stream<Path> walk = Files.walk(path)) {
+                result = walk
+                        .filter(p -> !Files.isDirectory(p))
+                        // this is a path, not string,
+                        // this only test if path end with a certain path
+                        //.filter(p -> p.endsWith(fileExtension))
+                        // convert path to string first
+                        .map(p -> p.toString())
+                        .filter(f -> f.endsWith(fileExtension))
+                        .collect(Collectors.toList());
+            }
+
+            return result;
+        }
 }
