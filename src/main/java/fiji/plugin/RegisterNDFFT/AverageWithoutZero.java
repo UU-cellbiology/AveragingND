@@ -3,7 +3,7 @@ package fiji.plugin.RegisterNDFFT;
 import java.util.ArrayList;
 
 import ij.IJ;
-import ij.ImagePlus;
+
 import ij.WindowManager;
 import ij.plugin.PlugIn;
 import net.imglib2.Cursor;
@@ -62,6 +62,7 @@ public class AverageWithoutZero implements PlugIn {
 		averagedIP.show();
 		*/
 	}
+	/** returns an interval that encompasses all RAIs in the input ArrayList **/
 	public static FinalInterval getIntervalAverageArray(ArrayList<RandomAccessibleInterval< FloatType >> imgs)
 	{
 		int i,j;
@@ -100,7 +101,7 @@ public class AverageWithoutZero implements PlugIn {
 	public static IntervalView<FloatType> averageArray(ArrayList<RandomAccessibleInterval< FloatType >> imgs)
 	{
 		int i;
-		int nDim = imgs.get(0).numDimensions();
+		//int nDim = imgs.get(0).numDimensions();
 
 		FinalInterval intervalMax = getIntervalAverageArray(imgs);
 		
@@ -147,7 +148,11 @@ public class AverageWithoutZero implements PlugIn {
 
 	}
 	
-
+	/** Provided with an ArrayList of RAI, returns a new ArrayList with two RAIs:
+	 * the first contains sum of all intensities at a current voxel/pixel location,
+	 * the second contains an integer equal to how many RAIs have a pixel at this location. 
+	 * Since input RAIs could be of different sizeslocations, the output size is made to include
+	 * all of them, i.e. hyper box that includes them all **/
 	
 	public static ArrayList<IntervalView<FloatType>> sumAndCountArray(ArrayList<RandomAccessibleInterval< FloatType >> imgs)
 	{
@@ -207,7 +212,9 @@ public class AverageWithoutZero implements PlugIn {
 		return 	finalSumCnt;
 
 	}
-	
+	/** returns an average RAI provided ArrayList with two RAIs:
+	 * first being intensity values and the second is count number.
+	 * Checks for zero counts and returned RAI origin is at zeros. **/
 	public static IntervalView<FloatType> averageFromSumAndCount(ArrayList<IntervalView<FloatType>> alSumCnt)
 	{
 

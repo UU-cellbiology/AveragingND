@@ -15,6 +15,7 @@ import io.scif.img.ImgOpener;
 import net.imglib2.exception.IncompatibleTypeException;
 import net.imglib2.img.ImagePlusAdapter;
 import net.imglib2.img.Img;
+import net.imglib2.img.display.imagej.ImageJFunctions;
 import net.imglib2.type.numeric.real.FloatType;
 import net.imglib2.view.Views;
 
@@ -33,6 +34,7 @@ public class RegisterNDFFT implements PlugIn
 	public static int defaultImg2 = 1;
 	public static double dMaxFraction = 0.5;
 	public static boolean bShowCC = true;
+	public static boolean bFixX = false;
 	public static boolean bRegisterTemplate = true;
 	public long [] finShift;
 	public int regChannel1 =0;
@@ -77,6 +79,7 @@ public class RegisterNDFFT implements PlugIn
 		gd1.addCheckbox("Exclude zero values?", Prefs.get("RegisterNDFFT.bExcludeZeros", false));		
 		gd1.addCheckbox("Show cross-correlation?", Prefs.get("RegisterNDFFT.bShowCC", false));
 		gd1.addCheckbox("Register template?", Prefs.get("RegisterNDFFT.bRegisterTemplate", false));
+		gd1.addCheckbox("Fix X axis shift?", Prefs.get("RegisterNDFFT.bFixX", false));
 				
 		gd1.showDialog();
 		
@@ -95,6 +98,8 @@ public class RegisterNDFFT implements PlugIn
 		Prefs.set("RegisterNDFFT.bShowCC", bShowCC);
 		bRegisterTemplate  = gd1.getNextBoolean();
 		Prefs.set("RegisterNDFFT.bRegisterTemplate", bRegisterTemplate);
+		bFixX  = gd1.getNextBoolean();
+		Prefs.set("RegisterNDFFT.bFixX", bFixX);
 		
 		// create channel selector
 		final int numChannels1 = imp1.getNChannels();
@@ -132,6 +137,7 @@ public class RegisterNDFFT implements PlugIn
 		final Img< FloatType > template_in = ImagePlusAdapter.convertFloat(imp2);
 		GenNormCC normCC = new GenNormCC();
 		normCC.bExcludeZeros=bExcludeZeros;
+		normCC.bZeroX=bFixX;
 		
 		boolean bNormCCcalc=false;
 		if(multiCh)
@@ -204,40 +210,52 @@ public class RegisterNDFFT implements PlugIn
 		
 		// open with SCIFIO ImgOpener as FloatTypes
 		ImgOpener io = new ImgOpener();
-		
-		final Img< FloatType > image_in = io.openImgs( "linetest2Dn_ve.tif",
+	/**/
+		final Img< FloatType > image_in = io.openImgs( "bb1smEC.tif",
 			new FloatType() ).get( 0 );
-		//final Img< FloatType > template_in = io.openImgs( "Zstack 1.1-1-1.tif",
-		final Img< FloatType > template_in = io.openImgs( "linetest2Dn_crop.tif",
-			new FloatType() ).get( 0 );
-		
-			
+
+		final Img< FloatType > template_in = io.openImgs( "bb1sm20rotEC.tif",
+				new FloatType() ).get( 0 );
+			/**/	
 		
 		/*
-		final Img< FloatType > image_in = io.openImgs( "s001.tif",
-				new FloatType() ).get( 0 );
-		final Img< FloatType > template_in = io.openImgs( "s002.tif",
-				new FloatType() ).get( 0 );
+		final Img< FloatType > image_in = io.openImgs( "wave0_20.tif",
+			new FloatType() ).get( 0 );
+		final Img< FloatType > template_in = io.openImgs( "wave45_20.tif",
+			new FloatType() ).get( 0 );
 		*/
+		/*
+		final Img< FloatType > image_in = io.openImgs( "h1.tif",
+				new FloatType() ).get( 0 );
+			final Img< FloatType > template_in = io.openImgs( "h2.tif",
+				new FloatType() ).get( 0 );
+			
+			*/
+		/*
+		final Img< FloatType > image_in = io.openImgs( "polarOriginal.tif",
+			new FloatType() ).get( 0 );
+		final Img< FloatType > template_in = io.openImgs( "polarOriginal_rot45.tif",
+			new FloatType() ).get( 0 );
+			*/
+		
+		 ImageJFunctions.show(image_in).setTitle("image");
+		 ImageJFunctions.show(template_in).setTitle("template");
+		
+	/*
 		long[] imdim= new long[image_in.numDimensions()];
 		image_in.dimensions(imdim);
 		
 
-/*	final Img< FloatType > image_in = io.openImgs( "linetest2Dn.tif",
-				new FloatType() ).get( 0 );
-		final Img< FloatType > template_in = io.openImgs( "linetest2Dn_shift.tif",
-				new FloatType() ).get( 0 );
-*/
 		GenNormCC normCC = new GenNormCC();
 		normCC.caclulateGenNormCC(image_in, template_in, 0.50, true);//, true);
-		//GenNormCC.caclulateGenNormCC(Views.hyperSlice(image_in, 2, 2), Views.hyperSlice(template_in, 2, 2), 0.4, true, true);
-		//RegisterTranslation reg = new RegisterTranslation(image_in .numDimensions());
-		// run the example
-		//reg.registerTranslation(image_in, template_in);
+*/
+		RotationCC rotCC =new RotationCC();
+		
+		rotCC.caclulateRotationFFTCC(image_in, template_in);
 
 		
 	
 	}
-	//void showRegisteredTemplate()
+
 
 }

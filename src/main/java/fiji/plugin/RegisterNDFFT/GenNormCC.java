@@ -39,9 +39,12 @@ public class GenNormCC {
 	/** whether to log results to IJ.log window **/
 	public boolean bVerbose = true;
 	
-	/** **/
-	
+	/** whether to exclude/ignore voxels that are zeros **/	
 	public boolean bExcludeZeros = false;
+	
+	/** whether to look for the zero with X shift = 0,
+	 * needed for rotation registration **/
+	public boolean bZeroX = false;
 	
 	
 	/** 
@@ -293,7 +296,33 @@ public class GenNormCC {
 		
 		//now find max value
 		Point shift = new Point(nDim);
-		FloatType fCCvalue = MiscUtils.computeMaxLocation(ivCCswapped,shift);
+		FloatType fCCvalue;
+		if(!bZeroX)
+		{
+			fCCvalue = MiscUtils.computeMaxLocation(ivCCswapped,shift);
+		}
+		else
+		{
+			//Point shiftZeroX =new Point(nDim-1);
+			long [] minX = ivCCswapped.minAsLongArray();
+			long [] maxX = ivCCswapped.maxAsLongArray();
+			minX[0]=0;
+			maxX[0]=0;
+			//minX[1]=-179;
+			//maxX[1]=180;
+			FinalInterval valX = new FinalInterval(minX,maxX);
+			//ImageJFunctions.show(Views.interval(ivCCswapped, valX)).setTitle( "XZero" );
+			
+			fCCvalue = MiscUtils.computeMaxLocation(Views.interval(ivCCswapped, valX),shift);
+			/*
+			//ImageJFunctions.show(Views.hyperSlice(ivCCswapped, 0, 0)).setTitle( "XZero" );
+			//fCCvalue = MiscUtils.computeMaxLocation(Views.hyperSlice(ivCCswapped, 0, 0),shiftZeroX);
+			for(i=1;i<nDim;i++)
+			{
+				shift.setPosition(shiftZeroX.getLongPosition(i-1), i);
+			}
+			*/
+		}
 		
 		if (bVerbose)
 		{
