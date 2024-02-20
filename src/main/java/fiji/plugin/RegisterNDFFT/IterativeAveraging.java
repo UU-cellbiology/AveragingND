@@ -168,6 +168,17 @@ public class IterativeAveraging implements PlugIn {
 		long [][] shiftsOut = new long[nImageN][];
 		double [] listCC = new double[nImageN];
 		
+		double maxAverCC = (-1)*Double.MAX_VALUE;
+		int nIterMax = 0;
+		ArrayList<long []> maxAverCCshifts = new ArrayList<long []>();
+		final int dimShift= imgs.get(0).numDimensions();
+		
+		for(i=0;i<nImageN;i++)
+		{
+			maxAverCCshifts.add(new long[dimShift]);
+		}
+		
+		
 		for(iter=0;(iter<nIterN && !bConverged);iter++)
 		{
 			IJ.showStatus("Averaging iteration "+Integer.toString(iter)+"...");
@@ -195,6 +206,22 @@ public class IterativeAveraging implements PlugIn {
 			}
 			// do median filtering of shifts
 			medianCorrectShifts(shiftsOut);
+			
+			//see what we get and remember it
+			avrgCC=avrgCC/nImageN;
+			if(avrgCC > maxAverCC)
+			{
+				maxAverCC = avrgCC;
+				nIterMax = iter+1;
+				for(i=0;i<nImageN;i++)
+				{
+					for(int d=0;d< dimShift;d++)
+					{
+						maxAverCCshifts.get(i)[d] = shiftsOut[i][d];
+					}
+				}				
+				
+			}
 			//put data to the table
 			for(i=0;i<nImageN;i++)
 			{
@@ -210,13 +237,13 @@ public class IterativeAveraging implements PlugIn {
 					ptable.addLabel(image_names.get(i));
 				}	
 			}
-			
+
 			// calculate new img array with applied displacements			
-			cumShift= buildShiftedIntervals(imgs, imgs_shift,shifts);
+			cumShift = buildShiftedIntervals(imgs, imgs_shift,shifts);
 			//new average (sum and count)
 			sumAndCount = AverageWithoutZero.sumAndCountArray(imgs_shift);
 			
-			avrgCC=avrgCC/nImageN;
+			
 			ptableCC.incrementCounter();
 			ptableCC.addValue("iter", iter+1);
 			ptableCC.addValue("averCC", avrgCC);
@@ -233,7 +260,7 @@ public class IterativeAveraging implements PlugIn {
 			if(Math.abs(oldAvrgCC - avrgCC)<0.000001 && Math.abs(oldCumShift - cumShift)<0.001)
 			{
 				bConverged = true;
-				iter--;
+			
 				IJ.log("Converged before reaching the final iteration number");
 			}
 			else
@@ -245,21 +272,29 @@ public class IterativeAveraging implements PlugIn {
 		}
 		IJ.showStatus("Iterative averaging...done");
 		IJ.showProgress(2,2);
+		IJ.log("Best result: iteration #"+Integer.toString(nIterMax)+" with average CC " +Double.toString(maxAverCC));
 		ptable.show("Results");
 		ptableCC.show("Average CC");
+		
+		shifts = maxAverCCshifts;
+		// calculate new img array with applied displacements			
+		cumShift = buildShiftedIntervals(imgs, imgs_shift,shifts);
+		//new average (sum and count)
+		sumAndCount = AverageWithoutZero.sumAndCountArray(imgs_shift);
+		
 		ArrayList<RandomAccessibleInterval< FloatType >> imgs_multiCh_reg = new ArrayList<RandomAccessibleInterval< FloatType >>();
 		
 		IntervalView<FloatType> finalAver = null;
 		if(!bMultiCh)
 		{
 			finalAver = AverageWithoutZero.averageFromSumAndCount(sumAndCount);
-			MiscUtils.wrapFloatImgCal(finalAver,"final_average_"+Integer.toString(iter+1),calibInput,false).show();
+			MiscUtils.wrapFloatImgCal(finalAver,"final_average_"+Integer.toString(nIterMax),calibInput,false).show();
 		}
 		else
 		{
 			getMultiChAligned(imgs_multiCh_reg, shifts);
 			finalAver = AverageWithoutZero.averageArray(imgs_multiCh_reg);
-			MiscUtils.wrapFloatImgCal(finalAver,"final_average_"+Integer.toString(iter+1),calibInput,true).show();			
+			MiscUtils.wrapFloatImgCal(finalAver,"final_average_"+Integer.toString(nIterMax),calibInput,true).show();			
 		}
 		if(bOutputInput)
 		{
