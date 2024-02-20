@@ -9,6 +9,7 @@ import java.util.List;
 
 
 import ij.IJ;
+import ij.ImageJ;
 import ij.ImagePlus;
 import ij.Prefs;
 import ij.WindowManager;
@@ -18,8 +19,12 @@ import ij.io.FileSaver;
 import ij.measure.Calibration;
 import ij.measure.ResultsTable;
 import ij.plugin.PlugIn;
+import io.scif.img.ImgIOException;
+import io.scif.img.ImgOpener;
 import net.imglib2.Cursor;
+import net.imglib2.FinalInterval;
 import net.imglib2.RandomAccessibleInterval;
+import net.imglib2.exception.IncompatibleTypeException;
 import net.imglib2.img.ImagePlusAdapter;
 import net.imglib2.img.Img;
 import net.imglib2.img.array.ArrayImgs;
@@ -111,7 +116,7 @@ public class IterativeAveraging implements PlugIn {
 		imgs_shift = new ArrayList<RandomAccessibleInterval< FloatType >>();
 		shifts = new ArrayList<long []>();
 		image_names = new ArrayList<String>();
-		if(nInput ==0)
+		if(nInput == 0)
 		{
 			 if(!loadAllOpenImages())
 				 return;			 
@@ -122,17 +127,16 @@ public class IterativeAveraging implements PlugIn {
 				return;
 		}
 		
-		
-		//determine initial template
-		if(nIniTemplate==0)
+		// case nIniTemplate ==1 automatically happens during image loading
+		//for ==0 we need to generate new array
+		if(nIniTemplate == 0)
 		{
 			shifts = centeredShifts(imgs);
 		}
 		//create a new shifted array of images
 		buildShiftedIntervals(imgs, imgs_shift,shifts);
 		
-		
-		
+
 		ArrayList<IntervalView<FloatType>> sumAndCount = null;
 		sumAndCount = AverageWithoutZero.sumAndCountArray(imgs_shift);
 
@@ -244,32 +248,40 @@ public class IterativeAveraging implements PlugIn {
 		ptable.show("Results");
 		ptableCC.show("Average CC");
 		ArrayList<RandomAccessibleInterval< FloatType >> imgs_multiCh_reg = new ArrayList<RandomAccessibleInterval< FloatType >>();
+		
+		IntervalView<FloatType> finalAver = null;
 		if(!bMultiCh)
 		{
-			MiscUtils.wrapFloatImgCal(AverageWithoutZero.averageFromSumAndCount(sumAndCount),"final_average_"+Integer.toString(iter+1),calibInput,false).show();
+			finalAver = AverageWithoutZero.averageFromSumAndCount(sumAndCount);
+			MiscUtils.wrapFloatImgCal(finalAver,"final_average_"+Integer.toString(iter+1),calibInput,false).show();
 		}
 		else
 		{
-			getMultiChAligned(imgs_multiCh_reg, shifts);			
-			MiscUtils.wrapFloatImgCal(AverageWithoutZero.averageArray(imgs_multiCh_reg),"final_average_"+Integer.toString(iter+1),calibInput,true).show();			
+			getMultiChAligned(imgs_multiCh_reg, shifts);
+			finalAver = AverageWithoutZero.averageArray(imgs_multiCh_reg);
+			MiscUtils.wrapFloatImgCal(finalAver,"final_average_"+Integer.toString(iter+1),calibInput,true).show();			
 		}
 		if(bOutputInput)
 		{
 				DirectoryChooser dc = new DirectoryChooser ( "Choose a folder to save output..." );
 				String sPath = dc.getDirectory();
+				if(sPath == null || finalAver == null)
+					return;
 				ImagePlus temp;
 				for(i=0;i<nImageN;i++)
 				{
 					if(!bMultiCh)
 					{
 						//MiscUtils.wrapFloatImgCal(Views.interval(Views.extendZero(imgs_shift.get(i)),imgs.get(i)),"iter_aver_"+image_names.get(i),calibInput, false).show();
-						temp =MiscUtils.wrapFloatImgCal(Views.interval(Views.extendZero(imgs_shift.get(i)),imgs.get(i)),"iter_aver_"+image_names.get(i),calibInput, false); 
+						//temp =MiscUtils.wrapFloatImgCal(Views.interval(Views.extendZero(imgs_shift.get(i)),imgs.get(i)),"iter_aver_"+image_names.get(i),calibInput, false); 
+						temp =MiscUtils.wrapFloatImgCal(Views.interval(Views.extendZero(imgs_shift.get(i)),finalAver),"iter_aver_"+image_names.get(i),calibInput, false); 
 						//IJ.saveAsTiff(temp, sPath);
 					}
 					else
 					{
 						//
-						temp = MiscUtils.wrapFloatImgCal(Views.interval(Views.extendZero(imgs_multiCh_reg.get(i)),imgs_multiCh.get(i)),"iter_aver_"+image_names.get(i),calibInput, true);
+						//temp = MiscUtils.wrapFloatImgCal(Views.interval(Views.extendZero(imgs_multiCh_reg.get(i)),imgs_multiCh.get(i)),"iter_aver_"+image_names.get(i),calibInput, true);
+						temp = MiscUtils.wrapFloatImgCal(Views.interval(Views.extendZero(imgs_multiCh_reg.get(i)),finalAver),"iter_aver_"+image_names.get(i),calibInput, true);
 						
 					}
 					IJ.saveAsTiff(temp, sPath+temp.getTitle());
@@ -487,6 +499,8 @@ public class IterativeAveraging implements PlugIn {
 				return false;
             }
 			nImageN=files.size();
+			if (nImageN == 0)
+				return false;
 			ImagePlus impBridge =IJ.openImage(files.get(0));
 			numChannels = impBridge.getNChannels();
 			calibInput =  impBridge.getCalibration();
@@ -576,6 +590,15 @@ public class IterativeAveraging implements PlugIn {
 		
 	}
 	
+	public static void main( final String[] args ) throws ImgIOException, IncompatibleTypeException
+	{
+		// open an ImageJ window
+		new ImageJ();
+		IterativeAveraging it = new IterativeAveraging();
+		it.run(null);
+
+		
 	
+	}
 	
 }

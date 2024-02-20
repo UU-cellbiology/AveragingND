@@ -155,6 +155,7 @@ public class MiscUtils {
 		return outIP;
 		//outIP.show();
 	}
+	
     public static List<String> findFiles(Path path, String fileExtension)
             throws IOException {
 
@@ -164,8 +165,8 @@ public class MiscUtils {
 
             List<String> result;
 
-            try (Stream<Path> walk = Files.walk(path)) {
-                result = walk
+            try (Stream<Path> stream = Files.list(path)) {
+                result = stream
                         .filter(p -> !Files.isDirectory(p))
                         // this is a path, not string,
                         // this only test if path end with a certain path
