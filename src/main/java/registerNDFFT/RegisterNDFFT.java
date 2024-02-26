@@ -183,7 +183,7 @@ public class RegisterNDFFT implements PlugIn
 		int nDim = template.numDimensions();
 		long [] shift = new long [nDim];
 		int i,j;
-		
+		// TODO Auto-generated method stub
 		//"jumping" over color channel, since it is xyczt and our shift is xyz
 		j=0;
 		for (i=0;i<nDim;i++)

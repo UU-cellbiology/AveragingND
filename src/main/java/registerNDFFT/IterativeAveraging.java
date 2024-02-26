@@ -527,7 +527,7 @@ public class IterativeAveraging implements PlugIn {
 			//IJ.log(sPath);
 			try {
 
-				files = MiscUtils.findFiles(Paths.get(sPath), "tif");
+				files = MiscUtils.findFiles(Paths.get(sPath), ".tif");
 				//files.forEach(x -> IJ.log(x));
 			} catch (IOException e) {
 				e.printStackTrace();
