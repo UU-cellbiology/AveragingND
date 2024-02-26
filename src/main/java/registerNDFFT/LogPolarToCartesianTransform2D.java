@@ -1,4 +1,4 @@
-package fiji.plugin.RegisterNDFFT;
+package registerNDFFT;
 
 import net.imglib2.RealLocalizable;
 import net.imglib2.RealPositionable;

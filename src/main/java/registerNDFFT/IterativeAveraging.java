@@ -1,4 +1,4 @@
-package fiji.plugin.RegisterNDFFT;
+package registerNDFFT;
 
 import java.io.IOException;
 
