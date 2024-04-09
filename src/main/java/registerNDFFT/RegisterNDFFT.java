@@ -210,6 +210,8 @@ public class RegisterNDFFT implements PlugIn
 		
 		// open with SCIFIO ImgOpener as FloatTypes
 		ImgOpener io = new ImgOpener();
+		
+
 	/**/
 		final Img< FloatType > image_in = io.openImgs( "bb1smEC.tif",
 			new FloatType() ).get( 0 );

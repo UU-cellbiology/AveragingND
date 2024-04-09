@@ -14,6 +14,7 @@ import net.imglib2.img.Img;
 import net.imglib2.img.array.ArrayImgs;
 import net.imglib2.img.display.imagej.ImageJFunctions;
 import net.imglib2.type.numeric.real.FloatType;
+import net.imglib2.util.Intervals;
 import net.imglib2.view.IntervalView;
 import net.imglib2.view.Views;
 
@@ -24,8 +25,7 @@ public class AverageWithoutZero implements PlugIn {
 	public void run(String arg0) {
 
 		int i;
-		//this part is honestly stolen from "Pairwise Stitching" plugin
-		//https://github.com/fiji/Stitching/blob/master/src/main/java/plugin/Stitching_Pairwise.java
+		
 		// get list of image stacks
 		final int[] idList = WindowManager.getIDList();		
 
@@ -43,7 +43,7 @@ public class AverageWithoutZero implements PlugIn {
 		}
 
 		//ImagePlus averagedIP = ImageJFunctions.wrap(averageImg,"Average");
-		IntervalView<FloatType> averageImg = averageArray(imgs);
+		IntervalView<FloatType> averageImg = Views.zeroMin(averageArray(imgs, true));
 		if(WindowManager.getImage(0).getNChannels()>1)
 		{
 			multiCh = true;
@@ -65,43 +65,25 @@ public class AverageWithoutZero implements PlugIn {
 	/** returns an interval that encompasses all RAIs in the input ArrayList **/
 	public static FinalInterval getIntervalAverageArray(ArrayList<RandomAccessibleInterval< FloatType >> imgs)
 	{
-		int i,j;
 		
-		int nDim = imgs.get(0).numDimensions();
-		long [][] maxDim = new long[2][nDim];
-		long [] currMinDim = new long[nDim];
-		long [] currMaxDim = new long[nDim];
-		for(i=0;i<imgs.size();i++)
-		{
-			imgs.get(i).max(currMaxDim);
-			imgs.get(i).min(currMinDim);
-			//imgs.get(i).dimensions(currDim);
-			for (j=0;j<nDim;j++)
-			{
-				if(maxDim[0][j]>currMinDim[j])
-				{
-					maxDim[0][j]=currMinDim[j];
-				}
+		if (imgs.size()==0)
+			return null;
+		FinalInterval out = new FinalInterval(imgs.get(0));
+		
+		for(int i=1;i<imgs.size();i++)
+			out = Intervals.union(out, imgs.get(i));
 
-				if(maxDim[1][j]<currMaxDim[j])
-				{
-					maxDim[1][j]=currMaxDim[j];
-				}
-			}
-		}
-		long [] dimMax = new long[nDim];
-		for(j=0;j<nDim;j++)
-		{
-			dimMax[j]=maxDim[1][j]-maxDim[0][j]+1;
-		}
-		return new FinalInterval( maxDim[0] ,  maxDim[1] );
+		return out;
 	}
 	
-	
-	public static IntervalView<FloatType> averageArray(ArrayList<RandomAccessibleInterval< FloatType >> imgs)
+	/** function calculates average image from the provided ArrayList of RAI intervals.
+	 * The output image is extended to cover all intervals. Intervals are extended with zeros
+	 * to the same extent.
+	 * If bIgnoreZeros is true, it does not include in the averaging pixel values > 0.0000001
+	 * **/
+	public static IntervalView<FloatType> averageArray(final ArrayList<RandomAccessibleInterval< FloatType >> imgs, final boolean bIgnoreZero)
 	{
 		int i;
-		//int nDim = imgs.get(0).numDimensions();
 
 		FinalInterval intervalMax = getIntervalAverageArray(imgs);
 		
@@ -119,49 +101,59 @@ public class AverageWithoutZero implements PlugIn {
 		final Img<FloatType> averageImgArr = ArrayImgs.floats(intervalMax.dimensionsAsLongArray());
 		long [] originCoord = intervalMax.minAsLongArray();
 		final IntervalView<FloatType> averageImg = Views.translate(averageImgArr, originCoord);
-		//final ArrayImg<FloatType, FloatArray> averageImg = ArrayImgs.floats(dimMax);
+
 		Cursor<FloatType> avC = averageImg.cursor();
 		Cursor<FloatType> imgC;
-		float nNum, nVal, nValCur;
+		long nNumVal;
+		double nSumVal;
+		float nValCur;
 		while(avC.hasNext())
 		{
 			avC.fwd();
-			nNum=0.0f;
-			nVal=0.0f;
+			nNumVal = 0;
+			nSumVal = 0.0;
 			for(i=0;i<cursors.size();i++)
 			{
-				imgC=cursors.get(i);
+				imgC = cursors.get(i);
 				imgC.fwd();
-				nValCur=imgC.get().get();
-				if(nValCur>0)
+				nValCur = imgC.get().get();
+				if(bIgnoreZero)
 				{
-					nNum++;
-					nVal+=nValCur;
+					if(nValCur > 0.0000001)
+					{
+						nNumVal++;
+						nSumVal += nValCur;
+					}
 				}
+				else
+				{
+					nNumVal++;
+					nSumVal += nValCur;
+				}		
 			}
-			if(nNum>0.0f)
+			if(nNumVal > 0)
 			{
-				avC.get().set(nVal/nNum);
+				avC.get().set((float)(nSumVal/(double)nNumVal));
 			}
 		}	
-		return 	Views.zeroMin(averageImg);
+		return averageImg;
 
 	}
 	
-	/** Provided with an ArrayList of RAI, returns a new ArrayList with two RAIs:
-	 * the first contains sum of all intensities at a current voxel/pixel location,
-	 * the second contains an integer equal to how many RAIs have a pixel at this location. 
-	 * Since input RAIs could be of different sizeslocations, the output size is made to include
-	 * all of them, i.e. hyper box that includes them all **/
+	/** Provided with an ArrayList of RAIs, returns a new ArrayList with two RAIs:
+	 * the first contains cumulative sum of all intensities at a current voxel/pixel location,
+	 * the second contains an integer value equal to how many RAIs have a pixel at this location. 
+	 * Since input RAIs could be of different sizes/locations, the output size is made to include
+	 * all of them, i.e. a hyper box that includes them all **/
 	
 	public static ArrayList<IntervalView<FloatType>> sumAndCountArray(ArrayList<RandomAccessibleInterval< FloatType >> imgs)
 	{
 		int i;
-		//int nDim = imgs.get(0).numDimensions();
 
 		FinalInterval intervalMax = getIntervalAverageArray(imgs);
 		
 		ArrayList<IntervalView< FloatType >> interv = new ArrayList<IntervalView< FloatType >>();
+		
 		for(i=0;i<imgs.size();i++)
 		{
 			interv.add(Views.interval( Views.extendZero(imgs.get(i)),intervalMax));
@@ -172,49 +164,56 @@ public class AverageWithoutZero implements PlugIn {
 		{
 			cursors.add(interv.get(i).cursor());
 		}
+		
 		final Img<FloatType> sumImgArr = ArrayImgs.floats(intervalMax.dimensionsAsLongArray());
 		final Img<FloatType> countImgArr = ArrayImgs.floats(intervalMax.dimensionsAsLongArray());
+		
 		long [] originCoord = intervalMax.minAsLongArray();
+		
 		final IntervalView<FloatType> sumImg = Views.translate(sumImgArr, originCoord);
 		final IntervalView<FloatType> countImg = Views.translate(countImgArr, originCoord);
-		//final ArrayImg<FloatType, FloatArray> averageImg = ArrayImgs.floats(dimMax);
+
 		Cursor<FloatType> sumC = sumImg.cursor();
 		Cursor<FloatType> cntC = countImg.cursor();
 		Cursor<FloatType> imgC;
-		float nNum, nVal, nValCur;
+		long nNumVal;
+		double nSumVal;
+		float nValCur;
+		
 		while(sumC.hasNext())
 		{
 			sumC.fwd();
 			cntC.fwd();
-			nNum=0.0f;
-			nVal=0.0f;
+			nNumVal = 0;
+			nSumVal = 0;
 			for(i=0;i<cursors.size();i++)
 			{
 				imgC=cursors.get(i);
 				imgC.fwd();
 				nValCur=imgC.get().get();
-				if(nValCur>0)
+				if(nValCur > 0.0000001)
 				{
-					nNum++;
-					nVal+=nValCur;
+					nNumVal++;
+					nSumVal += nValCur;
 				}
 			}
-			if(nNum>0.0f)
+			if(nNumVal > 0)
 			{
-				sumC.get().set(nVal);
-				cntC.get().set(nNum);
+				sumC.get().set((float)nSumVal);
+				cntC.get().set((float)nNumVal);
 			}
 		}
 
 		ArrayList<IntervalView<FloatType>> finalSumCnt = new ArrayList<IntervalView<FloatType>>();
 		finalSumCnt.add(sumImg);
 		finalSumCnt.add(countImg);
-		return 	finalSumCnt;
+		
+		return finalSumCnt;
 
 	}
-	/** returns an average RAI provided ArrayList with two RAIs:
-	 * first being intensity values and the second is count number.
-	 * Checks for zero counts and returned RAI origin is at zeros. **/
+	/** returns an average RAI. It is assumed provided ArrayList contains two RAIs:
+	 * first being cumulative intensity values and the second is count number.
+	 * The returned RAI origin is always at zero (zeroMin) **/
 	public static IntervalView<FloatType> averageFromSumAndCount(ArrayList<IntervalView<FloatType>> alSumCnt)
 	{
 

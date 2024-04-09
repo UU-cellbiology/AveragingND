@@ -250,7 +250,7 @@ public class IterativeAveraging implements PlugIn {
 			ptableCC.addValue("cumShift", cumShift);
 			IJ.log("Iteration "+Integer.toString(iter+1)+" average CC " +Double.toString(avrgCC));
 			
-			//averageImg = AverageWithoutZero.averageArray(imgs_shift);
+			
 			if(bShowIntermediateAverage)
 			{
 				MiscUtils.wrapFloatImgCal(AverageWithoutZero.averageFromSumAndCount(sumAndCount),"average iteration "+Integer.toString(iter+1),calibInput, false).show();
@@ -285,6 +285,7 @@ public class IterativeAveraging implements PlugIn {
 		ArrayList<RandomAccessibleInterval< FloatType >> imgs_multiCh_reg = new ArrayList<RandomAccessibleInterval< FloatType >>();
 		
 		IntervalView<FloatType> finalAver = null;
+		
 		if(!bMultiCh)
 		{
 			finalAver = AverageWithoutZero.averageFromSumAndCount(sumAndCount);
@@ -293,7 +294,7 @@ public class IterativeAveraging implements PlugIn {
 		else
 		{
 			getMultiChAligned(imgs_multiCh_reg, shifts);
-			finalAver = AverageWithoutZero.averageArray(imgs_multiCh_reg);
+			finalAver = AverageWithoutZero.averageArray(imgs_multiCh_reg, true);
 			MiscUtils.wrapFloatImgCal(finalAver,"final_average_"+Integer.toString(nIterMax),calibInput,true).show();			
 		}
 		if(bOutputInput)
@@ -307,15 +308,10 @@ public class IterativeAveraging implements PlugIn {
 				{
 					if(!bMultiCh)
 					{
-						//MiscUtils.wrapFloatImgCal(Views.interval(Views.extendZero(imgs_shift.get(i)),imgs.get(i)),"iter_aver_"+image_names.get(i),calibInput, false).show();
-						//temp =MiscUtils.wrapFloatImgCal(Views.interval(Views.extendZero(imgs_shift.get(i)),imgs.get(i)),"iter_aver_"+image_names.get(i),calibInput, false); 
-						temp =MiscUtils.wrapFloatImgCal(Views.interval(Views.extendZero(imgs_shift.get(i)),finalAver),"iter_aver_"+image_names.get(i),calibInput, false); 
-						//IJ.saveAsTiff(temp, sPath);
+						temp = MiscUtils.wrapFloatImgCal(Views.interval(Views.extendZero(imgs_shift.get(i)),finalAver),"iter_aver_"+image_names.get(i),calibInput, false); 
 					}
 					else
 					{
-						//
-						//temp = MiscUtils.wrapFloatImgCal(Views.interval(Views.extendZero(imgs_multiCh_reg.get(i)),imgs_multiCh.get(i)),"iter_aver_"+image_names.get(i),calibInput, true);
 						temp = MiscUtils.wrapFloatImgCal(Views.interval(Views.extendZero(imgs_multiCh_reg.get(i)),finalAver),"iter_aver_"+image_names.get(i),calibInput, true);
 						
 					}
@@ -355,9 +351,7 @@ public class IterativeAveraging implements PlugIn {
 			
 			imgs_multiCh_reg.add(Views.translate(imgs_multiCh.get(iImCount), curr_shift));
 		}
-		//return imgs_multiCh_reg;
-		//IntervalView<FloatType>  averageImg = AverageWithoutZero.averageArray(imgs_multiCh_reg);
-		//MiscUtils.wrapFloatImgCal(averageImg,sTitle,cal,true).show();
+		
 	}
 	
 	/** given Sum and Count images alSumCnt, this function subtracts removedImage from Sum,
