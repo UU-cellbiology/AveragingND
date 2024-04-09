@@ -3,6 +3,8 @@ package registerNDFFT;
 import java.io.IOException;
 
 import java.nio.file.Paths;
+import java.text.DecimalFormat;
+import java.text.DecimalFormatSymbols;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
@@ -159,7 +161,7 @@ public class IterativeAveraging implements PlugIn {
 		double cumShift=0.0;
 		
 		double oldCumShift = -1.0;
-		double oldAvrgCC = -100.0;
+		double oldAvrgCC = Double.NaN;
 		
 		boolean bConverged = false;
 		IJ.showStatus("Iterative averaging...");
@@ -178,11 +180,18 @@ public class IterativeAveraging implements PlugIn {
 			maxAverCCshifts.add(new long[dimShift]);
 		}
 		
+		DecimalFormatSymbols symbols = new DecimalFormatSymbols();
+		symbols.setDecimalSeparator('.');
+		DecimalFormat df = new DecimalFormat ("#.########", symbols);
+		DecimalFormat df1 = new DecimalFormat ("#.#", symbols);
+		
+		long iterStartT, iterEndT;
 		
 		for(iter=0;(iter<nIterN && !bConverged);iter++)
 		{
-			IJ.showStatus("Averaging iteration "+Integer.toString(iter)+"...");
-			avrgCC=0.0;
+			IJ.showStatus("Averaging iteration "+Integer.toString(iter+1)+"...");
+			avrgCC = 0.0;
+			iterStartT = System.currentTimeMillis();
 			//calculate shifts and CC values
 			for(i=0;i<nImageN;i++)
 			{
@@ -248,8 +257,18 @@ public class IterativeAveraging implements PlugIn {
 			ptableCC.addValue("iter", iter+1);
 			ptableCC.addValue("averCC", avrgCC);
 			ptableCC.addValue("cumShift", cumShift);
-			IJ.log("Iteration "+Integer.toString(iter+1)+" average CC " +Double.toString(avrgCC));
-			
+			iterEndT = System.currentTimeMillis();
+			double elTime = (iterEndT -iterStartT)/60000.;
+			String sTimeEl = " (time "; 
+			if(elTime<1.0)
+			{
+				sTimeEl = sTimeEl +  df1.format(elTime*60.)+" sec)";
+			}
+			else
+			{
+				sTimeEl = sTimeEl +  df1.format(elTime)+" min)";
+			}
+			IJ.log("Iteration "+Integer.toString(iter+1)+" average CC " + df.format(avrgCC) +sTimeEl);			
 			
 			if(bShowIntermediateAverage)
 			{
@@ -272,11 +291,19 @@ public class IterativeAveraging implements PlugIn {
 		}
 		IJ.showStatus("Iterative averaging...done");
 		IJ.showProgress(2,2);
-		IJ.log("Best result: iteration #"+Integer.toString(nIterMax)+" with average CC " +Double.toString(maxAverCC));
-		ptable.show("Results");
-		ptableCC.show("Average CC");
+		if(nIterN!=0)
+		{
+			IJ.log("Best result: iteration #" + Integer.toString(nIterMax) + " with average CC " + df.format(maxAverCC));
 		
-		shifts = maxAverCCshifts;
+			ptable.show("Results");
+			ptableCC.show("Average CC");
+			shifts = maxAverCCshifts;
+		}
+		else
+		{
+			IJ.log("Iteration count is equal to zero, no registration was done, just averaging.");
+		}
+		
 		// calculate new img array with applied displacements			
 		cumShift = buildShiftedIntervals(imgs, imgs_shift,shifts);
 		//new average (sum and count)
