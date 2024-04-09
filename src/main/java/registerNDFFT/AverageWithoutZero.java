@@ -105,41 +105,113 @@ public class AverageWithoutZero implements PlugIn {
 		Cursor<FloatType> avC = averageImg.cursor();
 		Cursor<FloatType> imgC;
 		long nNumVal;
-		double nSumVal;
-		float nValCur;
+		double dSumVal;
+		float fValCur;
 		while(avC.hasNext())
 		{
 			avC.fwd();
 			nNumVal = 0;
-			nSumVal = 0.0;
+			dSumVal = 0.0;
 			for(i=0;i<cursors.size();i++)
 			{
 				imgC = cursors.get(i);
 				imgC.fwd();
-				nValCur = imgC.get().get();
+				fValCur = imgC.get().get();
 				if(bIgnoreZero)
 				{
-					if(nValCur > 0.0000001)
+					if(fValCur > 0.0000001)
 					{
 						nNumVal++;
-						nSumVal += nValCur;
+						dSumVal += fValCur;
 					}
 				}
 				else
 				{
 					nNumVal++;
-					nSumVal += nValCur;
+					dSumVal += fValCur;
 				}		
 			}
 			if(nNumVal > 0)
 			{
-				avC.get().set((float)(nSumVal/(double)nNumVal));
+				avC.get().set((float)(dSumVal/(double)nNumVal));
 			}
 		}	
 		return averageImg;
 
 	}
 	
+	/** function calculates stendard deviation image from the provided ArrayList of RAI intervals
+	 * and an average image RAI. 
+	 * The output image is extended to cover all intervals. Intervals are extended with zeros
+	 * to the same extent.
+	 * If bIgnoreZeros is true, it does not include in the averaging pixel values > 0.0000001
+	 * **/
+	public static IntervalView<FloatType> stdArray(final ArrayList<RandomAccessibleInterval< FloatType >> imgs, final RandomAccessibleInterval< FloatType > avrgRAI, final boolean bIgnoreZero)
+	{
+		int i;
+
+		FinalInterval intervalMax = getIntervalAverageArray(imgs);
+		
+		ArrayList<IntervalView< FloatType >> interv = new ArrayList<IntervalView< FloatType >>();
+		for(i=0;i<imgs.size();i++)
+		{
+			interv.add(Views.interval( Views.extendZero(imgs.get(i)),intervalMax));
+		}
+		
+		ArrayList<Cursor< FloatType >> cursors = new ArrayList<Cursor< FloatType >>();
+		for(i=0;i<interv.size();i++)
+		{
+			cursors.add(interv.get(i).cursor());
+		}
+		final Img<FloatType> stdImgArr = ArrayImgs.floats(intervalMax.dimensionsAsLongArray());
+		long [] originCoord = intervalMax.minAsLongArray();
+		final IntervalView<FloatType> stdImg = Views.translate(stdImgArr, originCoord);
+
+		Cursor<FloatType> stdC = stdImg.cursor();
+		//just in case, use extendZero
+		Cursor<FloatType> avrgC = Views.interval(Views.extendZero(avrgRAI),intervalMax).cursor();
+
+		Cursor<FloatType> imgC;
+		long nNumVal;
+		double dSumVal;
+		double dAvrgVal;
+		float fValCur;
+		while(stdC.hasNext())
+		{
+			stdC.fwd();
+			avrgC.fwd();
+			nNumVal = 0;
+			dSumVal = 0.0;
+			dAvrgVal = avrgC.get().get();
+			for(i=0;i<cursors.size();i++)
+			{
+				imgC = cursors.get(i);
+				imgC.fwd();
+				fValCur = imgC.get().get();
+				if(bIgnoreZero)
+				{
+					if(fValCur > 0.0000001)
+					{
+						nNumVal++;
+						fValCur-=dAvrgVal;
+						dSumVal += fValCur*fValCur;
+					}
+				}
+				else
+				{
+					nNumVal++;
+					fValCur-=  dAvrgVal;
+					dSumVal += fValCur*fValCur;
+				}		
+			}
+			if(nNumVal > 0)
+			{
+				stdC.get().set((float)Math.sqrt(dSumVal/(double)nNumVal));
+			}
+		}	
+		return stdImg;
+
+	}
 	/** Provided with an ArrayList of RAIs, returns a new ArrayList with two RAIs:
 	 * the first contains cumulative sum of all intensities at a current voxel/pixel location,
 	 * the second contains an integer value equal to how many RAIs have a pixel at this location. 

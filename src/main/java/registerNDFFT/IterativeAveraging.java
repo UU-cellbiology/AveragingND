@@ -290,7 +290,9 @@ public class IterativeAveraging implements PlugIn {
 
 		}
 		IJ.showStatus("Iterative averaging...done");
+		
 		IJ.showProgress(2,2);
+		
 		if(nIterN!=0)
 		{
 			IJ.log("Best result: iteration #" + Integer.toString(nIterMax) + " with average CC " + df.format(maxAverCC));
@@ -304,26 +306,36 @@ public class IterativeAveraging implements PlugIn {
 			IJ.log("Iteration count is equal to zero, no registration was done, just averaging.");
 		}
 		
-		// calculate new img array with applied displacements			
-		cumShift = buildShiftedIntervals(imgs, imgs_shift,shifts);
-		//new average (sum and count)
-		sumAndCount = AverageWithoutZero.sumAndCountArray(imgs_shift);
+
 		
-		ArrayList<RandomAccessibleInterval< FloatType >> imgs_multiCh_reg = new ArrayList<RandomAccessibleInterval< FloatType >>();
+		ArrayList<RandomAccessibleInterval< FloatType >> imgs_avrg_out = new ArrayList<RandomAccessibleInterval< FloatType >>();
 		
-		IntervalView<FloatType> finalAver = null;
 		
-		if(!bMultiCh)
+		
+		if(bMultiCh)
 		{
-			finalAver = AverageWithoutZero.averageFromSumAndCount(sumAndCount);
-			MiscUtils.wrapFloatImgCal(finalAver,"final_average_"+Integer.toString(nIterMax),calibInput,false).show();
+			getMultiChAligned(imgs_avrg_out, shifts);
 		}
 		else
 		{
-			getMultiChAligned(imgs_multiCh_reg, shifts);
-			finalAver = AverageWithoutZero.averageArray(imgs_multiCh_reg, true);
-			MiscUtils.wrapFloatImgCal(finalAver,"final_average_"+Integer.toString(nIterMax),calibInput,true).show();			
+			// calculate new img array with applied displacements	
+			buildShiftedIntervals(imgs, imgs_avrg_out,shifts);
+			// = imgs_shift;
 		}
+		
+		IJ.log("generating average image..");
+		
+		//calculate final average image
+		IntervalView<FloatType> finalAver = AverageWithoutZero.averageArray(imgs_avrg_out, true);
+		IJ.log("...done.");
+		MiscUtils.wrapFloatImgCal(finalAver,"final_average_"+Integer.toString(nIterMax),calibInput,bMultiCh).show();
+		
+		//calculate STD image
+		IJ.log("generating standard deviation image..");
+		IntervalView<FloatType> finalSTD = AverageWithoutZero.stdArray(imgs_avrg_out, finalAver, true);
+		MiscUtils.wrapFloatImgCal(finalSTD,"final_std_"+Integer.toString(nIterMax),calibInput,bMultiCh).show();
+		IJ.log("...done.");
+		
 		if(bOutputInput)
 		{
 				DirectoryChooser dc = new DirectoryChooser ( "Choose a folder to save output..." );
@@ -333,15 +345,8 @@ public class IterativeAveraging implements PlugIn {
 				ImagePlus temp;
 				for(i=0;i<nImageN;i++)
 				{
-					if(!bMultiCh)
-					{
-						temp = MiscUtils.wrapFloatImgCal(Views.interval(Views.extendZero(imgs_shift.get(i)),finalAver),"iter_aver_"+image_names.get(i),calibInput, false); 
-					}
-					else
-					{
-						temp = MiscUtils.wrapFloatImgCal(Views.interval(Views.extendZero(imgs_multiCh_reg.get(i)),finalAver),"iter_aver_"+image_names.get(i),calibInput, true);
-						
-					}
+					temp = MiscUtils.wrapFloatImgCal(Views.interval(Views.extendZero(imgs_avrg_out.get(i)),finalAver),"iter_aver_"+image_names.get(i),calibInput, bMultiCh); 
+	
 					IJ.saveAsTiff(temp, sPath+temp.getTitle());
 				}
 			
