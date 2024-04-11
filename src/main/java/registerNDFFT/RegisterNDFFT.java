@@ -183,7 +183,7 @@ public class RegisterNDFFT implements PlugIn
 		int nDim = template.numDimensions();
 		long [] shift = new long [nDim];
 		int i,j;
-		// TODO Auto-generated method stub
+
 		//"jumping" over color channel, since it is xyczt and our shift is xyz
 		j=0;
 		for (i=0;i<nDim;i++)
@@ -207,18 +207,23 @@ public class RegisterNDFFT implements PlugIn
 	{
 		// open an ImageJ window
 		new ImageJ();
+		IJ.open("/home/eugene/Desktop/projects/RegisterNDFFT/single/MAX_089-1.tif");
+		IJ.open("/home/eugene/Desktop/projects/RegisterNDFFT/single/MAX_098-1.tif");
+		
+		RegisterNDFFT test = new RegisterNDFFT();
+		test.run(null);
 		
 		// open with SCIFIO ImgOpener as FloatTypes
-		ImgOpener io = new ImgOpener();
+		//ImgOpener io = new ImgOpener();
 		
 
-	/**/
+	/*
 		final Img< FloatType > image_in = io.openImgs( "bb1smEC.tif",
 			new FloatType() ).get( 0 );
 
 		final Img< FloatType > template_in = io.openImgs( "bb1sm20rotEC.tif",
 				new FloatType() ).get( 0 );
-			/**/	
+			*/	
 		
 		/*
 		final Img< FloatType > image_in = io.openImgs( "wave0_20.tif",
@@ -240,8 +245,8 @@ public class RegisterNDFFT implements PlugIn
 			new FloatType() ).get( 0 );
 			*/
 		
-		 ImageJFunctions.show(image_in).setTitle("image");
-		 ImageJFunctions.show(template_in).setTitle("template");
+		 //ImageJFunctions.show(image_in).setTitle("image");
+		 //ImageJFunctions.show(template_in).setTitle("template");
 		
 	/*
 		long[] imdim= new long[image_in.numDimensions()];
@@ -251,10 +256,11 @@ public class RegisterNDFFT implements PlugIn
 		GenNormCC normCC = new GenNormCC();
 		normCC.caclulateGenNormCC(image_in, template_in, 0.50, true);//, true);
 */
+		/* 
 		RotationCC rotCC =new RotationCC();
 		
 		rotCC.caclulateRotationFFTCC(image_in, template_in);
-
+		*/
 		
 	
 	}

@@ -170,12 +170,13 @@ public class IterativeAveraging implements PlugIn {
 		double [] listCC = new double[nImageN];
 		
 		double maxAverCC = (-1)*Double.MAX_VALUE;
+		final int dimShift = imageSet.imgs.get(0).numDimensions(); 
 		int nIterMax = 0;
 		ArrayList<long []> maxAverCCshifts = new ArrayList<long []>();
 		
 		for(i=0;i<nImageN;i++)
 		{
-			maxAverCCshifts.add(new long[imageSet.nDim]);
+			maxAverCCshifts.add(new long[dimShift]);
 		}
 		
 		DecimalFormatSymbols symbols = new DecimalFormatSymbols();
@@ -222,7 +223,7 @@ public class IterativeAveraging implements PlugIn {
 				nIterMax = iter+1;
 				for(i=0;i<nImageN;i++)
 				{
-					for(int d=0;d< imageSet.nDim;d++)
+					for(int d=0;d<dimShift;d++)
 					{
 						maxAverCCshifts.get(i)[d] = shiftsOut[i][d];
 					}
@@ -356,7 +357,7 @@ public class IterativeAveraging implements PlugIn {
 	//void showMultiChAverage(final ArrayList<RandomAccessibleInterval< FloatType >> imgs_multiCh, final ArrayList<long []> shifts, String sTitle, Calibration cal)
 	void getMultiChAligned(final ArrayList<RandomAccessibleInterval< FloatType >> imgs_multiCh_reg, final ArrayList<long []> shifts)//, String sTitle, Calibration cal)
 	{
-		final int nDim = imageSet.nDim;
+		final int nDim =  imageSet.imgs_multiCh.get(0).numDimensions();
 		long [] curr_shift = new long [nDim];
 		int iImCount;
 		int i,j;

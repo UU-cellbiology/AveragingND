@@ -1,13 +1,10 @@
 package registerNDFFT;
 
 import ij.IJ;
-import ij.ImagePlus;
-import ij.measure.Calibration;
+
 import net.imglib2.Cursor;
-import net.imglib2.Dimensions;
 import net.imglib2.FinalDimensions;
 import net.imglib2.FinalInterval;
-import net.imglib2.IterableInterval;
 import net.imglib2.Point;
 import net.imglib2.RandomAccessibleInterval;
 import net.imglib2.algorithm.fft2.FFT;
@@ -27,9 +24,9 @@ import net.imglib2.view.Views;
 
 public class GenNormCC {
 	
-	
 	/** dimensionality of images **/	
 	private int nDim;
+	
 	/** maximum of norm cross-correlation coefficient **/	
 	public double dMaxCC;
 	
@@ -54,10 +51,7 @@ public class GenNormCC {
 	public boolean caclulateGenNormCC(final RandomAccessibleInterval< FloatType > image, final RandomAccessibleInterval< FloatType > template, final double max_fraction_shift, final boolean bShowCC)//, boolean bRegisterTemplate) //throws ImgIOException, IncompatibleTypeException	
 	{
 		int i;
-		
-		//double [] finData;
-		
-		
+				
 		if(image.numDimensions()!=template.numDimensions())
 		{
 			IJ.log("different dimensions of input and template!");
@@ -151,6 +145,7 @@ public class GenNormCC {
 		
 		sqImg.forEach(t-> t.mul(t.get()));
 		sqTem.forEach(t-> t.mul(t.get()));
+		
 		//padded squared images
 		IntervalView< FloatType > padSqImg = Views.interval(Views.extendZero(sqImg),imgIntPad);
 		IntervalView< FloatType > padSqTem = Views.interval(Views.extendZero(sqTem),temIntPad);
@@ -162,12 +157,12 @@ public class GenNormCC {
 		final ImgFactory< FloatType > factoryFloat = new ArrayImgFactory< FloatType >(new FloatType());
 		
 		//start with FFT
-		final Img< ComplexFloatType > imageFFT2 = FFT.realToComplex(padImg, factoryComplex);
-		final Img< ComplexFloatType > templateFFT2=FFT.realToComplex(padTem, factoryComplex);
-		final Img< ComplexFloatType > unImageFFT2 = FFT.realToComplex(padUnitImg, factoryComplex);
-		final Img< ComplexFloatType > unTemplateFFT2=FFT.realToComplex(padUnitTem, factoryComplex);
-		final Img< ComplexFloatType > sqImageFFT2 = FFT.realToComplex(padSqImg, factoryComplex);
-		final Img< ComplexFloatType > sqTemplateFFT2=FFT.realToComplex(padSqTem, factoryComplex);
+		final Img< ComplexFloatType > imageFFT2    =   FFT.realToComplex(padImg, factoryComplex);
+		final Img< ComplexFloatType > templateFFT2 =   FFT.realToComplex(padTem, factoryComplex);
+		final Img< ComplexFloatType > unImageFFT2  =   FFT.realToComplex(padUnitImg, factoryComplex);
+		final Img< ComplexFloatType > unTemplateFFT2 = FFT.realToComplex(padUnitTem, factoryComplex);
+		final Img< ComplexFloatType > sqImageFFT2 =    FFT.realToComplex(padSqImg, factoryComplex);
+		final Img< ComplexFloatType > sqTemplateFFT2 = FFT.realToComplex(padSqTem, factoryComplex);
 		
 		//conjugates
 		FFTMethods.complexConjugate(templateFFT2);	
@@ -205,8 +200,6 @@ public class GenNormCC {
 		//ImageJFunctions.show(invF1F1I2).setTitle( "term1" );
 		//ImageJFunctions.show(invI1F2F2).setTitle( "term2" );
 
-		
-		
 		final Cursor< FloatType > denom1 = invF1F1I2.cursor();
 		final Cursor< FloatType > denom2 = invI1F2F2.cursor();
 		float maxVal = Float.MIN_VALUE;
@@ -232,6 +225,7 @@ public class GenNormCC {
 		double tol = Math.abs(maxVal)*1E-4;//float precision limit
 		final Cursor< FloatType > numCurs = invF1F2.cursor();
 		final Cursor< FloatType > denomCurs = invF1F1I2.cursor();
+		
 		while(numCurs.hasNext())
 		{
 			numCurs.fwd();
@@ -255,6 +249,7 @@ public class GenNormCC {
 		//determine the maximum shift of template with respect to original image,
 		//assuming that zero shift is when both images' are centered 
 		double nHalfSpan, nCenter;
+		
 		for(i=0;i<nDim;i++)
 		{
 			nHalfSpan = 0.5*((temDim[i]-1)+(imgDim[i]-1));
@@ -265,7 +260,7 @@ public class GenNormCC {
 			//cropCorr[0][i]=Math.round((-1)*((temDim[i]-1)*max_fraction_shift));
 			//cropCorr[1][i]=Math.round((imgDim[i]-1)*max_fraction_shift);	
 		}
-		FinalInterval interval = new FinalInterval( cropCorr[0] ,  cropCorr[1] );
+		FinalInterval intervalCrop = new FinalInterval( cropCorr[0] ,  cropCorr[1] );
 
 		//Now we need to account for the padding. Since it is changing the origin
 		//of coordinates of template with respect to the original image
@@ -279,7 +274,7 @@ public class GenNormCC {
 		//to show frequencies centered/radial. So we can have negative shifts, etc
 		//Instead of truly swapping the quadrants we just periodically mirror them (extend periodic)
 		
-		IntervalView< FloatType > ivCCswapped =  Views.interval(Views.translate(Views.extendPeriodic( invF1F2 ), nCCOrigin),interval);
+		IntervalView< FloatType > ivCCswapped =  Views.interval(Views.translate(Views.extendPeriodic( invF1F2 ), nCCOrigin),intervalCrop);
 		//IntervalView< FloatType > ivCCswapped =  Views.interval(Views.extendPeriodic( invF1F2 ),interval);
 		
 
