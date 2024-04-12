@@ -202,10 +202,10 @@ public class ImageSet {
 	
 	boolean checkConsistency(final ImagePlus imageIn)
 	{
-		if(!Objects.equals(sRefDims, getDimensionsText(imageIn)))
+		if(!Objects.equals(sRefDims, MiscUtils.getDimensionsText(imageIn)))
 		{
 			IJ.log("Error! Image \""+imageIn.getTitle() +"\" has different dimensions, skipping.");
-			IJ.log("("+getDimensionsText(imageIn) +" vs assumed " + sRefDims + ")");
+			IJ.log("("+MiscUtils.getDimensionsText(imageIn) +" vs assumed " + sRefDims + ")");
 			return false;
 		}
 		Calibration calIn = imageIn.getCalibration();
@@ -221,7 +221,7 @@ public class ImageSet {
 	void fillDimensions(final ImagePlus ipFirst)
 	{
 		IJ.log("Analyzing dimensions:");
-		sRefDims = getDimensionsText(ipFirst);
+		sRefDims = MiscUtils.getDimensionsText(ipFirst);
 		nDim = sRefDims.length();
 		cal = ipFirst.getCalibration();
 		String sDims = "XY";
@@ -233,16 +233,19 @@ public class ImageSet {
 		{
 			sDims = sDims + "Z";
 		}
+		
+		if(nTimePoints>1)
+		{
+			sDims = sDims + "T";
+		}
+		
 		if(nChannels>1)
 		{
 			bMultiCh = true;
 			sDims = sDims + "C";
 		}
 
-		if(nTimePoints>1)
-		{
-			sDims = sDims + "T";
-		}
+
 		sDims = sDims +" and " + Integer.toString(ipFirst.getBitDepth())+"-bit";
 		
 		if(bMultiCh)
@@ -253,26 +256,7 @@ public class ImageSet {
 		IJ.log(" - Assuming all files are "+sDims+" ");
 	}
 	
-	
-	public static String getDimensionsText(final ImagePlus ip)
-	{
-		String sDims = "XY";
-		
-		if(ip.getNSlices()>1)
-		{
-			sDims = sDims + "Z";
-		}
-		if(ip.getNChannels()>1)
-		{
-			sDims = sDims + "C";
-		}
 
-		if(ip.getNFrames()>1)
-		{
-			sDims = sDims + "T";
-		}
-		return sDims;
-	}
 	/**given the path to folder and file extension, returns List<String> of filenames **/
 	public static List<String> getFilenamesFromFolder(final String sFolderPath, final String fileExtension)    
 			throws IOException {

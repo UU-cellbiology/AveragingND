@@ -305,21 +305,17 @@ public class IterativeAveraging implements PlugIn {
 			IJ.log("Iteration count is equal to zero, no registration was done, just averaging.");
 		}
 		
-
-		
-		ArrayList<RandomAccessibleInterval< FloatType >> imgs_avrg_out = new ArrayList<RandomAccessibleInterval< FloatType >>();
-		
-		
+		ArrayList<RandomAccessibleInterval< FloatType >> imgs_avrg_out; 
 		
 		if(imageSet.bMultiCh)
 		{
-			getMultiChAligned(imgs_avrg_out, shifts);
+			imgs_avrg_out = getMultiChAligned(shifts);
 		}
 		else
 		{
 			// calculate new img array with applied displacements	
+			imgs_avrg_out = new ArrayList<RandomAccessibleInterval< FloatType >>();
 			buildShiftedIntervals(imageSet.imgs, imgs_avrg_out,shifts);
-			// = imgs_shift;
 		}
 		
 		IJ.log("calculating final average image..");
@@ -354,22 +350,19 @@ public class IterativeAveraging implements PlugIn {
 	
 	/** function calculating multi-channel shifts from imgs_multiCh given shifts 
 	 * **/
-	//void showMultiChAverage(final ArrayList<RandomAccessibleInterval< FloatType >> imgs_multiCh, final ArrayList<long []> shifts, String sTitle, Calibration cal)
-	void getMultiChAligned(final ArrayList<RandomAccessibleInterval< FloatType >> imgs_multiCh_reg, final ArrayList<long []> shifts)//, String sTitle, Calibration cal)
+	
+	ArrayList<RandomAccessibleInterval< FloatType >> getMultiChAligned(final ArrayList<long []> shifts)//, String sTitle, Calibration cal)
 	{
 		final int nDim =  imageSet.imgs_multiCh.get(0).numDimensions();
-		long [] curr_shift = new long [nDim];
-		int iImCount;
-		int i,j;
-		//final ArrayList<RandomAccessibleInterval< FloatType >> imgs_multiCh_reg =new ArrayList<RandomAccessibleInterval< FloatType >>(); 
+		long [] curr_shift = new long [nDim];		
 		
-		for(iImCount=0;iImCount<shifts.size();iImCount++)
+		final ArrayList<RandomAccessibleInterval< FloatType >> imgs_multiCh_reg = new ArrayList<RandomAccessibleInterval< FloatType >>(); 
+		
+		for(int iImCount=0; iImCount<shifts.size(); iImCount++)
 		{
-
-			//"jumping" over color channel, since it is xyczt and our shift is xyz
-			
-			j=0;
-			for (i=0;i<nDim;i++)
+			//"jumping" over color channel, since it is xyczt and our shift is xyz			
+			int j=0;
+			for (int i=0;i<nDim;i++)
 			{
 				curr_shift[i]=shifts.get(iImCount)[j];
 				if(i==1)
@@ -378,11 +371,10 @@ public class IterativeAveraging implements PlugIn {
 					i++;
 				}
 				j++;
-			}
-			
+			}			
 			imgs_multiCh_reg.add(Views.translate(imageSet.imgs_multiCh.get(iImCount), curr_shift));
 		}
-		
+		return imgs_multiCh_reg;
 	}
 	
 	/** given Sum and Count images alSumCnt, this function subtracts removedImage from Sum,

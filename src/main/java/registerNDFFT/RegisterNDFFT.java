@@ -1,21 +1,30 @@
 package registerNDFFT;
 
 
+import java.awt.AWTEvent;
+import java.awt.Checkbox;
+import java.awt.Label;
+import java.awt.TextField;
+import java.text.DecimalFormat;
+import java.text.DecimalFormatSymbols;
+import java.awt.Choice;
+
 import ij.IJ;
 import ij.ImageJ;
 import ij.ImagePlus;
 import ij.Prefs;
 import ij.WindowManager;
+import ij.gui.DialogListener;
 import ij.gui.GenericDialog;
 import ij.measure.Calibration;
 import ij.measure.ResultsTable;
 import ij.plugin.PlugIn;
 import io.scif.img.ImgIOException;
-import io.scif.img.ImgOpener;
+
+import net.imglib2.FinalInterval;
 import net.imglib2.exception.IncompatibleTypeException;
 import net.imglib2.img.ImagePlusAdapter;
 import net.imglib2.img.Img;
-import net.imglib2.img.display.imagej.ImageJFunctions;
 import net.imglib2.type.numeric.real.FloatType;
 import net.imglib2.view.Views;
 
@@ -27,25 +36,33 @@ import net.imglib2.view.Views;
  * @author Eugene Katrukha
  * 
  */
-public class RegisterNDFFT implements PlugIn 
+public class RegisterNDFFT implements PlugIn, DialogListener
 {
 	
 	public static int defaultImg1 = 0;
 	public static int defaultImg2 = 1;
-	public static double dMaxFraction = 0.5;
 	public static boolean bShowCC = true;
-	public static boolean bFixX = false;
 	public static boolean bRegisterTemplate = true;
 	public long [] finShift;
-	public int regChannel1 =0;
-	public int regChannel2 =0;
+	public int regChannel1 = 0;
+	public int regChannel2 = 0;
 	public boolean multiCh = false;
 	public boolean bExcludeZeros = false;
+	public int nConstrainReg = 0;
+	Label [] limName;
+	//Label yName;
+	//Label zName;
+	TextField [] limVal;
+	//TextField yVal;
+	//TextField zVal;
+	//boolean bZPresent;
 
 	@Override
 	public void run(String arg) {
 		
 		int i;
+		
+		double [] dLimits;
 
 		//this part is honestly stolen from "Pairwise Stitching" plugin
 		//https://github.com/fiji/Stitching/blob/master/src/main/java/plugin/Stitching_Pairwise.java
@@ -65,41 +82,189 @@ public class RegisterNDFFT implements PlugIn
 		/**
 		 * Dialog for choosing the images
 		 */
-		final GenericDialog gd1 = new GenericDialog( "Images/volumes registration" );
-		
+		final GenericDialog gdImages = new GenericDialog( "Images/volumes registration" );
+	
 		if ( defaultImg1 >= imgList.length || defaultImg2 >= imgList.length )
 		{
 			defaultImg1 = 0;
 			defaultImg2 = 1;
 		}
 		
-		gd1.addChoice("First_image (reference)", imgList, imgList[ defaultImg1 ] );
-		gd1.addChoice("Second_image (template)", imgList, imgList[ defaultImg2 ] );
-		gd1.addNumericField("Maximum shift (fraction, 0-1 range)", Prefs.get("RegisterNDFFT.dMaxFraction", 0.5), 3);
+		gdImages.addChoice("First_image (reference)", imgList, imgList[ defaultImg1 ] );
+		gdImages.addChoice("Second_image (template)", imgList, imgList[ defaultImg2 ] );
+		
+		gdImages.showDialog();
+				
+		if ( gdImages.wasCanceled() )
+			return;
+		
+		//TODO here I should check that they have the same dimensions
+		
+		ImagePlus imp1 = WindowManager.getImage( idList[ defaultImg1 = gdImages.getNextChoiceIndex() ] );		
+		ImagePlus imp2 = WindowManager.getImage( idList[ defaultImg2 = gdImages.getNextChoiceIndex() ] );	
+
+		
+		String sDims = MiscUtils.getDimensionsText(imp1);
+		bZPresent = false;
+		if(sDims.length()>2)
+		{
+			if(sDims.substring(0, 3).equals("XYZ"))
+			{
+				bZPresent = true;
+			}
+		}
+		
+		final String[] limitsReg = new String[  ] {"No","by voxels", "by image fraction"};
+		final GenericDialog gd1 = new GenericDialog( "Registration parameters" );	
 		gd1.addCheckbox("Exclude zero values?", Prefs.get("RegisterNDFFT.bExcludeZeros", false));		
 		gd1.addCheckbox("Show cross-correlation?", Prefs.get("RegisterNDFFT.bShowCC", false));
 		gd1.addCheckbox("Register template?", Prefs.get("RegisterNDFFT.bRegisterTemplate", false));
-		gd1.addCheckbox("Fix X axis shift?", Prefs.get("RegisterNDFFT.bFixX", false));
+		String sCurrChoice = Prefs.get("RegisterNDFFT.sConstrain", "No");
+		gd1.addChoice("Constrain registration?", limitsReg, sCurrChoice);
+		switch (sCurrChoice)
+		{
+			case "No":
+				gd1.addNumericField("No max X limit", 0.0, 3);
+				break;
+			case "by voxels":
+				gd1.addNumericField("X limit (px)", Prefs.get("RegisterNDFFT.dMaxXpx", 10.0), 3);
+				break;
+			case "by image fraction":
+				gd1.addNumericField("X limit (0-1)", Prefs.get("RegisterNDFFT.dMaxXfr", 0.5), 3);
+				break;
 				
+		}
+		xName = gd1.getLabel();
+		xVal = (TextField)gd1.getNumericFields().get(0);
+		switch (sCurrChoice)
+		{
+			case "No":
+				gd1.addNumericField("No max Y limit", 0.0, 3);
+				break;
+			case "by voxels":
+				gd1.addNumericField("Y limit (px)", Prefs.get("RegisterNDFFT.dMaxYpx", 10.0), 3);
+				break;
+			case "by image fraction":
+				gd1.addNumericField("Y limit (0-1)", Prefs.get("RegisterNDFFT.dMaxYfr", 0.5), 3);
+				break;
+				
+		}
+		yName = gd1.getLabel();
+		yVal = (TextField)gd1.getNumericFields().get(1);
+		if(bZPresent)
+		{
+			switch (sCurrChoice)
+			{
+				case "No":
+					gd1.addNumericField("No max Z limit", 0.0, 3);
+					break;
+				case "by voxels":
+					gd1.addNumericField("Z limit (px)", Prefs.get("RegisterNDFFT.dMaxZpx", 10.0), 3);
+					break;
+				case "by image fraction":
+					gd1.addNumericField("Z limit (0-1)", Prefs.get("RegisterNDFFT.dMaxZfr", 0.5), 3);
+					break;
+					
+			}
+			zName = gd1.getLabel();	
+			zVal = (TextField)gd1.getNumericFields().get(2);
+		}
+		if(sCurrChoice.equals("No"))
+		{
+			xVal.setEnabled(false);
+			yVal.setEnabled(false);
+			if(bZPresent)
+				zVal.setEnabled(false);
+		}
+		//gd1.addNumericField("Maximum shift (fraction, 0-1 range)", Prefs.get("RegisterNDFFT.dMaxFraction", 0.5), 3);
+		gd1.addDialogListener(this);
 		gd1.showDialog();
 		
 		if ( gd1.wasCanceled() )
 			return;
 		
-		ImagePlus imp1 = WindowManager.getImage( idList[ defaultImg1 = gd1.getNextChoiceIndex() ] );		
-		ImagePlus imp2 = WindowManager.getImage( idList[ defaultImg2 = gd1.getNextChoiceIndex() ] );	
-		
-		
-		dMaxFraction  = gd1.getNextNumber();
-		Prefs.set("RegisterNDFFT.dMaxFraction", dMaxFraction);
 		bExcludeZeros  = gd1.getNextBoolean();
 		Prefs.set("RegisterNDFFT.bExcludeZeros", bExcludeZeros);
 		bShowCC  = gd1.getNextBoolean();
 		Prefs.set("RegisterNDFFT.bShowCC", bShowCC);
 		bRegisterTemplate  = gd1.getNextBoolean();
 		Prefs.set("RegisterNDFFT.bRegisterTemplate", bRegisterTemplate);
-		bFixX  = gd1.getNextBoolean();
-		Prefs.set("RegisterNDFFT.bFixX", bFixX);
+		nConstrainReg = gd1.getNextChoiceIndex();
+		Prefs.set("RegisterNDFFT.sConstrain", limitsReg[nConstrainReg]);
+		if(nConstrainReg!=0)
+		{
+
+			if(nConstrainReg == 1)
+			{
+				dLimX = Math.abs(gd1.getNextNumber());
+				dLimY = Math.abs(gd1.getNextNumber());
+				if(bZPresent)
+				{
+					dLimZ = Math.abs(gd1.getNextNumber());
+				}
+				Prefs.set("RegisterNDFFT.dMaxXfr",dLimX);
+				Prefs.set("RegisterNDFFT.dMaxYfr",dLimY);
+				if(bZPresent)
+				{
+					Prefs.set("RegisterNDFFT.dMaxZfr",dLimZ);
+				}
+			}
+			else
+			{
+				dLimX = Math.min(Math.abs(gd1.getNextNumber()), 1.0);
+				dLimY = Math.min(Math.abs(gd1.getNextNumber()), 1.0);
+				if(bZPresent)
+				{
+					dLimZ = Math.min(Math.abs(gd1.getNextNumber()), 1.0);
+				}
+				Prefs.set("RegisterNDFFT.dMaxXpx",dLimX);
+				Prefs.set("RegisterNDFFT.dMaxYpx",dLimY);
+				if(bZPresent)
+				{
+					Prefs.set("RegisterNDFFT.dMaxZpx",dLimZ);
+				}				
+
+			}
+		}
+		double [] lim_fractions = null;
+		FinalInterval limInterval = null;
+		if(nConstrainReg == 1)
+		{
+			long[] minI;
+			long[] maxI;
+			if(bZPresent)
+			{
+				minI = new long[3];
+				maxI = new long[3];
+				minI[2] = (long) ((-1.0)*dLimZ);
+				maxI[2] = (long) (dLimZ);
+			}
+			else
+			{
+				minI = new long[2];
+				maxI = new long[2];
+			}
+			maxI[0] = (long) dLimX;
+			maxI[1] = (long) dLimY;
+			minI[0] = (long) ((-1.0)*dLimX);
+			minI[1] = (long) ((-1.0)*dLimY);
+			limInterval = new FinalInterval(minI, maxI);
+		}
+		if(nConstrainReg == 2)
+		{
+			if(bZPresent)
+			{
+				lim_fractions = new double[3];
+				lim_fractions[2] = dLimZ;
+			}
+			else
+			{
+				lim_fractions = new double[2];
+			}
+			lim_fractions[0] = dLimX;
+			lim_fractions[1] = dLimY;
+			
+		}
 		
 		// create channel selector
 		final int numChannels1 = imp1.getNChannels();
@@ -136,18 +301,22 @@ public class RegisterNDFFT implements PlugIn
 		final Img< FloatType > image_in = ImagePlusAdapter.convertFloat(imp1);
 		final Img< FloatType > template_in = ImagePlusAdapter.convertFloat(imp2);
 		GenNormCC normCC = new GenNormCC();
-		normCC.bExcludeZeros=bExcludeZeros;
-		normCC.bZeroX=bFixX;
+		normCC.bExcludeZeros = bExcludeZeros;
+		
+		normCC.lim_fractions = lim_fractions;
+		normCC.limInterval = limInterval;
 		
 		boolean bNormCCcalc=false;
+		
 		if(multiCh)
-		{	
-			bNormCCcalc= normCC.caclulateGenNormCC(Views.hyperSlice(image_in, 2, regChannel1), Views.hyperSlice(template_in, 2, regChannel2), dMaxFraction , bShowCC);//, bRegisterTemplate);
+		{			
+			bNormCCcalc= normCC.caclulateGenNormCC(Views.hyperSlice(image_in, 2, regChannel1), Views.hyperSlice(template_in, 2, regChannel2), bShowCC);//, bRegisterTemplate);
+			
 			//finData=GenNormCC.caclulateGenNormCC(Views.hyperSlice(image_in, 2, regChannel1), Views.hyperSlice(template_in, 2, regChannel2), dMaxFraction , bShowCC);//, bRegisterTemplate);
 		}
 		else					
 		{
-			bNormCCcalc = normCC.caclulateGenNormCC(image_in, template_in, dMaxFraction , bShowCC);//, bRegisterTemplate);	
+			bNormCCcalc = normCC.caclulateGenNormCC(image_in, template_in, bShowCC);//, bRegisterTemplate);	
 			//finData=GenNormCC.caclulateGenNormCC(image_in, template_in, dMaxFraction , bShowCC);//, bRegisterTemplate);
 		}
 		if(!bNormCCcalc)
@@ -202,13 +371,75 @@ public class RegisterNDFFT implements PlugIn
 		
 		registeredIP.show();
 	}
+	@Override
+	public boolean dialogItemChanged(GenericDialog gd, AWTEvent e) {
+		
+		if(e!=null)
+		{
+			DecimalFormatSymbols symbols = new DecimalFormatSymbols();
+			symbols.setDecimalSeparator('.');
+			DecimalFormat df1 = new DecimalFormat ("#.##", symbols);
+			Choice limit = (Choice) gd.getChoices().get(0);
+			if(e.getSource()==limit)
+			{
+				switch (limit.getSelectedIndex())
+				{
+					case 0:
+						xName.setText("No X limit");										
+						yName.setText("No Y limit");
+						xVal.setEnabled(false);
+						yVal.setEnabled(false);
+						if(bZPresent)
+						{
+							zName.setText("No Z limit");
+							zVal.setEnabled(false);
+						}
+						break;
+					case 1:
+						xName.setText("X limit (px)");
+						yName.setText("Y limit (px)");
+						xVal.setEnabled(true);
+						yVal.setEnabled(true);
+						xVal.setText(df1.format(Prefs.get("RegisterNDFFT.dMaxXpx", 10.0)));
+						yVal.setText(df1.format(Prefs.get("RegisterNDFFT.dMaxYpx", 10.0)));
+						if(bZPresent)
+						{
+							zName.setText("Z limit (px)");
+							
+							zVal.setEnabled(true);
+							zVal.setText(df1.format(Prefs.get("RegisterNDFFT.dMaxZpx", 10.0)));
+						}
+						break;
+					case 2:
+						xName.setText("X limit (0-1)");
+						yName.setText("Y limit (0-1)");
+						xVal.setEnabled(true);
+						yVal.setEnabled(true);
+						xVal.setText(df1.format( Prefs.get("RegisterNDFFT.dMaxXfr", 0.5)));
+						yVal.setText(df1.format( Prefs.get("RegisterNDFFT.dMaxYfr", 0.5)));
+						if(bZPresent)
+						{
+							zName.setText("Z limit (0-1)");
+							zVal.setEnabled(true);
+							zVal.setText(df1.format( Prefs.get("RegisterNDFFT.dMaxZfr", 0.5)));
+						}
+						break;
+				}
+			}
+		}
+		return true;
+	}
 
 	public static void main( final String[] args ) throws ImgIOException, IncompatibleTypeException
 	{
 		// open an ImageJ window
 		new ImageJ();
-		IJ.open("/home/eugene/Desktop/projects/RegisterNDFFT/single/MAX_089-1.tif");
-		IJ.open("/home/eugene/Desktop/projects/RegisterNDFFT/single/MAX_098-1.tif");
+		//IJ.open("/home/eugene/Desktop/projects/RegisterNDFFT/single/MAX_089-1.tif");
+		//IJ.open("/home/eugene/Desktop/projects/RegisterNDFFT/single/MAX_098-1.tif");
+		//IJ.open("/home/eugene/Desktop/projects/RegisterNDFFT/single/MAX_089-1.tif");
+		
+		IJ.open("/home/eugene/Desktop/projects/RegisterNDFFT/4d/HyperStack.tif");
+		IJ.open("/home/eugene/Desktop/projects/RegisterNDFFT/4d/HyperStack-1.tif");
 		
 		RegisterNDFFT test = new RegisterNDFFT();
 		test.run(null);
@@ -264,6 +495,8 @@ public class RegisterNDFFT implements PlugIn
 		
 	
 	}
+
+
 
 
 }

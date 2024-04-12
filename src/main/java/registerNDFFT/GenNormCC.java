@@ -19,6 +19,7 @@ import net.imglib2.img.basictypeaccess.array.FloatArray;
 import net.imglib2.img.display.imagej.ImageJFunctions;
 import net.imglib2.type.numeric.complex.ComplexFloatType;
 import net.imglib2.type.numeric.real.FloatType;
+import net.imglib2.util.Intervals;
 import net.imglib2.view.IntervalView;
 import net.imglib2.view.Views;
 
@@ -39,26 +40,49 @@ public class GenNormCC {
 	/** whether to exclude/ignore voxels that are zeros **/	
 	public boolean bExcludeZeros = false;
 	
-	/** whether to look for the zero with X shift = 0,
-	 * needed for rotation registration **/
-	public boolean bZeroX = false;
-	
+	public double [] lim_fractions = null;
+	public FinalInterval limInterval = null;
+	final double max_fraction_shift = 0.9;	
 	
 	/** 
 	 * @param image
 	 * @param template
 	 */
-	public boolean caclulateGenNormCC(final RandomAccessibleInterval< FloatType > image, final RandomAccessibleInterval< FloatType > template, final double max_fraction_shift, final boolean bShowCC)//, boolean bRegisterTemplate) //throws ImgIOException, IncompatibleTypeException	
+	public boolean caclulateGenNormCC(final RandomAccessibleInterval< FloatType > image, final RandomAccessibleInterval< FloatType > template,  final boolean bShowCC)//, boolean bRegisterTemplate) //throws ImgIOException, IncompatibleTypeException	
 	{
 		int i;
 				
 		if(image.numDimensions()!=template.numDimensions())
 		{
-			IJ.log("different dimensions of input and template!");
+			IJ.log("Error! Different dimensions of input and template!");
 			return false;
 		}
+
+
 		
 		nDim = image.numDimensions();
+		if(lim_fractions!= null)
+		{
+			if(lim_fractions.length!=nDim)
+			{
+				IJ.log("Error! Constrain on registration for fraction of image has different dimensions!");
+				return false;
+			}
+			if(limInterval != null)
+			{
+				IJ.log("Warning! multiple constrains (both fraction and pixel)!");
+			}
+
+		}
+		if(limInterval != null)
+		{
+			if(limInterval.numDimensions()!=nDim)
+			{
+				IJ.log("Error! Constrain on registration in pixels has different dimensions!");
+				return false;
+			}
+		}
+		
 		dShift = new long [nDim];
 		long [] imgDim = new long[nDim];
 		long [] temDim = new long[nDim];
@@ -254,13 +278,24 @@ public class GenNormCC {
 		{
 			nHalfSpan = 0.5*((temDim[i]-1)+(imgDim[i]-1));
 			nCenter = nHalfSpan-(temDim[i]-1);
-			cropCorr[0][i]=Math.round(nCenter-nHalfSpan*max_fraction_shift);
-			cropCorr[1][i]=Math.round(nCenter+nHalfSpan*max_fraction_shift);	
-			
+			if(lim_fractions!=null)
+			{
+				cropCorr[0][i]=Math.round(nCenter-nHalfSpan*lim_fractions[i]);
+				cropCorr[1][i]=Math.round(nCenter+nHalfSpan*lim_fractions[i]);				
+			}
+			else
+			{
+				cropCorr[0][i]=Math.round(nCenter-nHalfSpan*max_fraction_shift);
+				cropCorr[1][i]=Math.round(nCenter+nHalfSpan*max_fraction_shift);	
+			}
 			//cropCorr[0][i]=Math.round((-1)*((temDim[i]-1)*max_fraction_shift));
 			//cropCorr[1][i]=Math.round((imgDim[i]-1)*max_fraction_shift);	
 		}
 		FinalInterval intervalCrop = new FinalInterval( cropCorr[0] ,  cropCorr[1] );
+		if(limInterval!=null)
+		{
+			intervalCrop  = Intervals.intersect(intervalCrop, limInterval);
+		}
 
 		//Now we need to account for the padding. Since it is changing the origin
 		//of coordinates of template with respect to the original image
@@ -292,10 +327,10 @@ public class GenNormCC {
 		//now find max value
 		Point shift = new Point(nDim);
 		FloatType fCCvalue;
-		if(!bZeroX)
-		{
-			fCCvalue = MiscUtils.computeMaxLocation(ivCCswapped,shift);
-		}
+	
+		fCCvalue = MiscUtils.computeMaxLocation(ivCCswapped,shift);
+		
+		/*
 		else
 		{
 			//Point shiftZeroX =new Point(nDim-1);
@@ -309,15 +344,9 @@ public class GenNormCC {
 			//ImageJFunctions.show(Views.interval(ivCCswapped, valX)).setTitle( "XZero" );
 			
 			fCCvalue = MiscUtils.computeMaxLocation(Views.interval(ivCCswapped, valX),shift);
-			/*
-			//ImageJFunctions.show(Views.hyperSlice(ivCCswapped, 0, 0)).setTitle( "XZero" );
-			//fCCvalue = MiscUtils.computeMaxLocation(Views.hyperSlice(ivCCswapped, 0, 0),shiftZeroX);
-			for(i=1;i<nDim;i++)
-			{
-				shift.setPosition(shiftZeroX.getLongPosition(i-1), i);
-			}
-			*/
+	
 		}
+		*/
 		
 		if (bVerbose)
 		{

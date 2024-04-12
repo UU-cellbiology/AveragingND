@@ -114,7 +114,6 @@ public class RotationCC {
 	    ImageJFunctions.show(transTem).setTitle("tempFFTPolar");
 	    GenNormCC normCC = new GenNormCC();
 	    normCC.bExcludeZeros=true;
-	    normCC.bZeroX = true;
 	    normCC.caclulateGenNormCC(Views.zeroMin(transIm), Views.zeroMin(transTem), 0.25 , false);
 	    //normCC.dShift[1]=normCC.dShift[1]-180;
 	    System.out.println(Long.toString(normCC.dShift[0]));

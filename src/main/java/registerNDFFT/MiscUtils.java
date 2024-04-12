@@ -178,5 +178,28 @@ public class MiscUtils {
             }
 
             return result;
-        }
+    }
+	
+    /** returns dimensions of the ImagePlus in XYZTC format**/
+	public static String getDimensionsText(final ImagePlus ip)
+	{
+		String sDims = "XY";
+		
+		if(ip.getNSlices()>1)
+		{
+			sDims = sDims + "Z";
+		}
+		
+		if(ip.getNFrames()>1)
+		{
+			sDims = sDims + "T";
+		}
+		
+		if(ip.getNChannels()>1)
+		{
+			sDims = sDims + "C";
+		}
+
+		return sDims;
+	}
 }
