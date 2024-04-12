@@ -50,12 +50,8 @@ public class RegisterNDFFT implements PlugIn, DialogListener
 	public boolean bExcludeZeros = false;
 	public int nConstrainReg = 0;
 	Label [] limName;
-	//Label yName;
-	//Label zName;
 	TextField [] limVal;
-	//TextField yVal;
-	//TextField zVal;
-	//boolean bZPresent;
+	int nDimReg;
 
 	@Override
 	public void run(String arg) {
@@ -102,17 +98,48 @@ public class RegisterNDFFT implements PlugIn, DialogListener
 		
 		ImagePlus imp1 = WindowManager.getImage( idList[ defaultImg1 = gdImages.getNextChoiceIndex() ] );		
 		ImagePlus imp2 = WindowManager.getImage( idList[ defaultImg2 = gdImages.getNextChoiceIndex() ] );	
+		
+		// create channel selector
+		final int numChannels1 = imp1.getNChannels();
+		final int numChannels2 = imp2.getNChannels();
+		
+		final String[] channels1 = new String[ numChannels1 ];
+		final String[] channels2 = new String[ numChannels2 ];
+		if(numChannels1>1 && numChannels2>1)
+		{
+			multiCh = true;
+		}
+		
+		
+		if(multiCh)
+		{
+			for ( int c = 0; c < channels1.length; ++c )
+				channels1[ c ] = "Use channel " + Integer.toString(c+1);
+			for ( int c = 0; c < channels2.length; ++c )
+				channels2[ c ] = "Use channel " + Integer.toString(c+1);
+			
+			final GenericDialog gdCh = new GenericDialog( "Choose registration channel" );
 
+			gdCh.addChoice( "Reference_image_channel", channels1, channels1[ 0 ] );
+			gdCh.addChoice( "Template_image_channel", channels2, channels2[ 0 ] );
+			gdCh.showDialog();
+
+			if ( gdCh.wasCanceled() )
+				return;
+			regChannel1 = gdCh.getNextChoiceIndex();
+			regChannel2 = gdCh.getNextChoiceIndex();
+			
+		}
 		
 		String sDims = MiscUtils.getDimensionsText(imp1);
-		bZPresent = false;
-		if(sDims.length()>2)
+		nDimReg = sDims.length();
+		if(multiCh)
 		{
-			if(sDims.substring(0, 3).equals("XYZ"))
-			{
-				bZPresent = true;
-			}
+			nDimReg--; //remove the C component
 		}
+		limName = new Label[nDimReg];
+		limVal = new TextField[nDimReg];
+		dLimits = new double [nDimReg];
 		
 		final String[] limitsReg = new String[  ] {"No","by voxels", "by image fraction"};
 		final GenericDialog gd1 = new GenericDialog( "Registration parameters" );	
@@ -121,62 +148,31 @@ public class RegisterNDFFT implements PlugIn, DialogListener
 		gd1.addCheckbox("Register template?", Prefs.get("RegisterNDFFT.bRegisterTemplate", false));
 		String sCurrChoice = Prefs.get("RegisterNDFFT.sConstrain", "No");
 		gd1.addChoice("Constrain registration?", limitsReg, sCurrChoice);
-		switch (sCurrChoice)
-		{
-			case "No":
-				gd1.addNumericField("No max X limit", 0.0, 3);
-				break;
-			case "by voxels":
-				gd1.addNumericField("X limit (px)", Prefs.get("RegisterNDFFT.dMaxXpx", 10.0), 3);
-				break;
-			case "by image fraction":
-				gd1.addNumericField("X limit (0-1)", Prefs.get("RegisterNDFFT.dMaxXfr", 0.5), 3);
-				break;
-				
-		}
-		xName = gd1.getLabel();
-		xVal = (TextField)gd1.getNumericFields().get(0);
-		switch (sCurrChoice)
-		{
-			case "No":
-				gd1.addNumericField("No max Y limit", 0.0, 3);
-				break;
-			case "by voxels":
-				gd1.addNumericField("Y limit (px)", Prefs.get("RegisterNDFFT.dMaxYpx", 10.0), 3);
-				break;
-			case "by image fraction":
-				gd1.addNumericField("Y limit (0-1)", Prefs.get("RegisterNDFFT.dMaxYfr", 0.5), 3);
-				break;
-				
-		}
-		yName = gd1.getLabel();
-		yVal = (TextField)gd1.getNumericFields().get(1);
-		if(bZPresent)
+		
+		for (i=0;i<nDimReg;i++)
 		{
 			switch (sCurrChoice)
 			{
 				case "No":
-					gd1.addNumericField("No max Z limit", 0.0, 3);
+					gd1.addNumericField("No max "+sDims.charAt(i)+" limit", 0.0, 3);
 					break;
 				case "by voxels":
-					gd1.addNumericField("Z limit (px)", Prefs.get("RegisterNDFFT.dMaxZpx", 10.0), 3);
+					gd1.addNumericField(sDims.charAt(i)+" limit (px)", Prefs.get("RegisterNDFFT.dMax"+sDims.charAt(i)+"px", 10.0), 3);
 					break;
 				case "by image fraction":
-					gd1.addNumericField("Z limit (0-1)", Prefs.get("RegisterNDFFT.dMaxZfr", 0.5), 3);
+					gd1.addNumericField(sDims.charAt(i)+" limit (0-1)", Prefs.get("RegisterNDFFT.dMax"+sDims.charAt(i)+"fr", 0.5), 3);
 					break;
 					
 			}
-			zName = gd1.getLabel();	
-			zVal = (TextField)gd1.getNumericFields().get(2);
+			limName[i] = gd1.getLabel();
+			limVal[i] = (TextField)gd1.getNumericFields().get(0);	
+			if(sCurrChoice.equals("No"))
+			{
+				limVal[i].setEnabled(false);
+			}
 		}
-		if(sCurrChoice.equals("No"))
-		{
-			xVal.setEnabled(false);
-			yVal.setEnabled(false);
-			if(bZPresent)
-				zVal.setEnabled(false);
-		}
-		//gd1.addNumericField("Maximum shift (fraction, 0-1 range)", Prefs.get("RegisterNDFFT.dMaxFraction", 0.5), 3);
+
+
 		gd1.addDialogListener(this);
 		gd1.showDialog();
 		
@@ -196,33 +192,20 @@ public class RegisterNDFFT implements PlugIn, DialogListener
 
 			if(nConstrainReg == 1)
 			{
-				dLimX = Math.abs(gd1.getNextNumber());
-				dLimY = Math.abs(gd1.getNextNumber());
-				if(bZPresent)
+				for(i=0;i<nDimReg;i++)
 				{
-					dLimZ = Math.abs(gd1.getNextNumber());
+					dLimits[i]=Math.abs(gd1.getNextNumber());
 				}
-				Prefs.set("RegisterNDFFT.dMaxXfr",dLimX);
-				Prefs.set("RegisterNDFFT.dMaxYfr",dLimY);
-				if(bZPresent)
-				{
-					Prefs.set("RegisterNDFFT.dMaxZfr",dLimZ);
-				}
+				Prefs.set("RegisterNDFFT.dMax"+sDims.charAt(i)+"fr",dLimits[i]);
 			}
 			else
 			{
-				dLimX = Math.min(Math.abs(gd1.getNextNumber()), 1.0);
-				dLimY = Math.min(Math.abs(gd1.getNextNumber()), 1.0);
-				if(bZPresent)
+				for(i=0;i<nDimReg;i++)
 				{
-					dLimZ = Math.min(Math.abs(gd1.getNextNumber()), 1.0);
+					dLimits[i]=Math.min(Math.abs(gd1.getNextNumber()), 1.0);
 				}
-				Prefs.set("RegisterNDFFT.dMaxXpx",dLimX);
-				Prefs.set("RegisterNDFFT.dMaxYpx",dLimY);
-				if(bZPresent)
-				{
-					Prefs.set("RegisterNDFFT.dMaxZpx",dLimZ);
-				}				
+				Prefs.set("RegisterNDFFT.dMax"+sDims.charAt(i)+"px",dLimits[i]);
+			
 
 			}
 		}
@@ -265,38 +248,7 @@ public class RegisterNDFFT implements PlugIn, DialogListener
 			lim_fractions[1] = dLimY;
 			
 		}
-		
-		// create channel selector
-		final int numChannels1 = imp1.getNChannels();
-		final int numChannels2 = imp2.getNChannels();
-		
-		final String[] channels1 = new String[ numChannels1 ];
-		final String[] channels2 = new String[ numChannels2 ];
-		if(numChannels1>1 && numChannels2>1)
-		{
-			multiCh = true;
-		}
-		
-		
-		if(multiCh)
-		{
-			for ( int c = 0; c < channels1.length; ++c )
-				channels1[ c ] = "Use channel " + Integer.toString(c+1);
-			for ( int c = 0; c < channels2.length; ++c )
-				channels2[ c ] = "Use channel " + Integer.toString(c+1);
-			
-			final GenericDialog gd2 = new GenericDialog( "Register multichannel" );
 
-			gd2.addChoice( "Reference_image_channel", channels1, channels1[ 0 ] );
-			gd2.addChoice( "Template_image_channel", channels2, channels2[ 0 ] );
-			gd2.showDialog();
-
-			if ( gd2.wasCanceled() )
-				return;
-			regChannel1 = gd2.getNextChoiceIndex();
-			regChannel2 = gd2.getNextChoiceIndex();
-			
-		}
 		
 		final Img< FloatType > image_in = ImagePlusAdapter.convertFloat(imp1);
 		final Img< FloatType > template_in = ImagePlusAdapter.convertFloat(imp2);
