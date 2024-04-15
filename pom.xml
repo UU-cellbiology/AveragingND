@@ -18,12 +18,13 @@
 	<url>https://github.com/ekatrukha/AveragingND</url>
 	<inceptionYear>2021</inceptionYear>
 	<organization>
-		<name>Fiji</name>
-		<url>https://fiji.sc/</url>
+		<name>Cell Biology, Neurobiology and Biophysics Department of Utrecht University</name>
+		<url>https://cellbiology.science.uu.nl/</url>
 	</organization>
 	<licenses>
 		<license>
 			<name>Simplified BSD License</name>
+			<url>https://opensource.org/licenses/BSD-2-Clause</url>
 			<distribution>repo</distribution>
 		</license>
 	</licenses>
@@ -79,13 +80,6 @@
         	<license.copyrightOwners>Fiji distribution of ImageJ for the life sciences.</license.copyrightOwners>
 	</properties>
 
-    <repositories>
-        <repository>
-            <id>imagej.public</id>
-            <url>http://maven.imagej.net/content/groups/public</url>
-        </repository>
-    </repositories>
-
 	<dependencies>
 		<!-- ImgLib2 dependencies -->
 		<dependency>
@@ -127,5 +121,10 @@
 
 	</dependencies>
 
-
+	<repositories>		
+		<repository>
+			<id>scijava.public</id>
+			<url>https://maven.scijava.org/content/groups/public</url>
+		</repository>
+	</repositories>
 </project>
