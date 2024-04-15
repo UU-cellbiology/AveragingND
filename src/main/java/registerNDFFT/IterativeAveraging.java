@@ -69,17 +69,12 @@ public class IterativeAveraging implements PlugIn, DialogListener {
 		
 		double [] dLimits;
 		
-		//final String[] sIniTemplate = new String[3];
-		final String[] sIniTemplate = new String[2];
-		sIniTemplate[0] = "Average (center)";
-		sIniTemplate[1] = "Average (top-left)";
-		//sIniTemplate[2] = "Least squares (pairwise)";
 		
 		final String[] sInput = new String[2];
 		sInput[0] = "All currently open images";
 		sInput[1] = "Specify images in a folder";
 		
-		final GenericDialog gdFiles = new GenericDialog( "Iterative registration" );
+		final GenericDialog gdFiles = new GenericDialog( "Iterative averaging" );
 
 		gdFiles.addChoice( "Input images:", sInput, Prefs.get("RegisterNDFFT.IA.nInput", sInput[0]) );
 		gdFiles.showDialog();
@@ -120,6 +115,7 @@ public class IterativeAveraging implements PlugIn, DialogListener {
 		limVal = new TextField[nDimReg];
 		dLimits = new double [nDimReg];
 		
+		final String[] sIniTemplate = new String[ ]{"Average (center)","Average (top-left)"};
 		final String[] limitsReg = new String[  ] {"No","by voxels", "by image fraction"};
 		final GenericDialog gd1 = new GenericDialog( "Averaging parameters" );
 		if(imageSet.bMultiCh)
@@ -179,7 +175,7 @@ public class IterativeAveraging implements PlugIn, DialogListener {
 		bOutputInput = gd1.getNextBoolean();
 		Prefs.set("RegisterNDFFT.IA.bOutputInput", bOutputInput);
 		nConstrainReg = gd1.getNextChoiceIndex();
-		Prefs.set("RegisterNDFFT.sConstrain", limitsReg[nConstrainReg]);
+		Prefs.set("RegisterNDFFT.IA.sConstrain", limitsReg[nConstrainReg]);
 		
 		if(nConstrainReg!=0)
 		{
@@ -188,7 +184,7 @@ public class IterativeAveraging implements PlugIn, DialogListener {
 				for(d=0;d<nDimReg;d++)
 				{
 					dLimits[d]=Math.abs(gd1.getNextNumber());
-					Prefs.set("RegisterNDFFT.dMax"+sDims.charAt(d)+"px",dLimits[d]);
+					Prefs.set("RegisterNDFFT.IA.dMax"+sDims.charAt(d)+"px",dLimits[d]);
 				}
 				
 			}
@@ -197,7 +193,7 @@ public class IterativeAveraging implements PlugIn, DialogListener {
 				for(d=0;d<nDimReg;d++)
 				{
 					dLimits[d]=Math.min(Math.abs(gd1.getNextNumber()), 1.0);
-					Prefs.set("RegisterNDFFT.dMax"+sDims.charAt(d)+"fr",dLimits[d]);
+					Prefs.set("RegisterNDFFT.IA.dMax"+sDims.charAt(d)+"fr",dLimits[d]);
 				}
 			}
 		}
