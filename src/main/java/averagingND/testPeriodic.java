@@ -1,4 +1,4 @@
-package registerNDFFT;
+package averagingND;
 
 
 import ij.IJ;

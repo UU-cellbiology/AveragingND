@@ -1,4 +1,4 @@
-package registerNDFFT;
+package averagingND;
 
 import net.imglib2.RealLocalizable;
 import net.imglib2.RealPositionable;

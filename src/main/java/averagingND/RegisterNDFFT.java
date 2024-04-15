@@ -1,4 +1,4 @@
-package registerNDFFT;
+package averagingND;
 
 
 import java.awt.AWTEvent;
