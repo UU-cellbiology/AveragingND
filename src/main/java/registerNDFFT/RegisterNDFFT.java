@@ -52,11 +52,12 @@ public class RegisterNDFFT implements PlugIn, DialogListener
 	Label [] limName;
 	TextField [] limVal;
 	int nDimReg;
+	String sDims;
 
 	@Override
 	public void run(String arg) {
 		
-		int i;
+		int d;
 		
 		double [] dLimits;
 
@@ -72,7 +73,7 @@ public class RegisterNDFFT implements PlugIn, DialogListener
 		}
 
 		final String[] imgList = new String[ idList.length ];
-		for ( i = 0; i < idList.length; ++i )
+		for ( int i = 0; i < idList.length; ++i )
 			imgList[ i ] = WindowManager.getImage(idList[i]).getTitle();
 		
 		/**
@@ -131,7 +132,7 @@ public class RegisterNDFFT implements PlugIn, DialogListener
 			
 		}
 		
-		String sDims = MiscUtils.getDimensionsText(imp1);
+		sDims = MiscUtils.getDimensionsText(imp1);
 		nDimReg = sDims.length();
 		if(multiCh)
 		{
@@ -149,26 +150,26 @@ public class RegisterNDFFT implements PlugIn, DialogListener
 		String sCurrChoice = Prefs.get("RegisterNDFFT.sConstrain", "No");
 		gd1.addChoice("Constrain registration?", limitsReg, sCurrChoice);
 		
-		for (i=0;i<nDimReg;i++)
+		for (d=0;d<nDimReg;d++)
 		{
 			switch (sCurrChoice)
 			{
 				case "No":
-					gd1.addNumericField("No max "+sDims.charAt(i)+" limit", 0.0, 3);
+					gd1.addNumericField("No max "+sDims.charAt(d)+" limit", 0.0, 3);
 					break;
 				case "by voxels":
-					gd1.addNumericField(sDims.charAt(i)+" limit (px)", Prefs.get("RegisterNDFFT.dMax"+sDims.charAt(i)+"px", 10.0), 3);
+					gd1.addNumericField(sDims.charAt(d)+" limit (px)", Prefs.get("RegisterNDFFT.dMax"+sDims.charAt(d)+"px", 10.0), 3);
 					break;
 				case "by image fraction":
-					gd1.addNumericField(sDims.charAt(i)+" limit (0-1)", Prefs.get("RegisterNDFFT.dMax"+sDims.charAt(i)+"fr", 0.5), 3);
+					gd1.addNumericField(sDims.charAt(d)+" limit (0-1)", Prefs.get("RegisterNDFFT.dMax"+sDims.charAt(d)+"fr", 0.5), 3);
 					break;
 					
 			}
-			limName[i] = gd1.getLabel();
-			limVal[i] = (TextField)gd1.getNumericFields().get(0);	
+			limName[d] = gd1.getLabel();
+			limVal[d] = (TextField)gd1.getNumericFields().get(d);	
 			if(sCurrChoice.equals("No"))
 			{
-				limVal[i].setEnabled(false);
+				limVal[d].setEnabled(false);
 			}
 		}
 
@@ -192,64 +193,45 @@ public class RegisterNDFFT implements PlugIn, DialogListener
 
 			if(nConstrainReg == 1)
 			{
-				for(i=0;i<nDimReg;i++)
+				for(d=0;d<nDimReg;d++)
 				{
-					dLimits[i]=Math.abs(gd1.getNextNumber());
+					dLimits[d]=Math.abs(gd1.getNextNumber());
+					Prefs.set("RegisterNDFFT.dMax"+sDims.charAt(d)+"px",dLimits[d]);
 				}
-				Prefs.set("RegisterNDFFT.dMax"+sDims.charAt(i)+"fr",dLimits[i]);
+				
 			}
 			else
 			{
-				for(i=0;i<nDimReg;i++)
+				for(d=0;d<nDimReg;d++)
 				{
-					dLimits[i]=Math.min(Math.abs(gd1.getNextNumber()), 1.0);
+					dLimits[d]=Math.min(Math.abs(gd1.getNextNumber()), 1.0);
+					Prefs.set("RegisterNDFFT.dMax"+sDims.charAt(d)+"fr",dLimits[d]);
 				}
-				Prefs.set("RegisterNDFFT.dMax"+sDims.charAt(i)+"px",dLimits[i]);
-			
-
 			}
 		}
 		double [] lim_fractions = null;
 		FinalInterval limInterval = null;
 		if(nConstrainReg == 1)
 		{
-			long[] minI;
-			long[] maxI;
-			if(bZPresent)
+			long[] minI = new long [nDimReg];
+			long[] maxI = new long [nDimReg];
+			for(d=0;d<nDimReg;d++)
 			{
-				minI = new long[3];
-				maxI = new long[3];
-				minI[2] = (long) ((-1.0)*dLimZ);
-				maxI[2] = (long) (dLimZ);
+				maxI[d] = (long) dLimits[d];
+				minI[d] = (long) ((-1.0)*dLimits[d]);
 			}
-			else
-			{
-				minI = new long[2];
-				maxI = new long[2];
-			}
-			maxI[0] = (long) dLimX;
-			maxI[1] = (long) dLimY;
-			minI[0] = (long) ((-1.0)*dLimX);
-			minI[1] = (long) ((-1.0)*dLimY);
 			limInterval = new FinalInterval(minI, maxI);
 		}
 		if(nConstrainReg == 2)
 		{
-			if(bZPresent)
+			lim_fractions = new double [nDimReg];
+			for(d=0;d<nDimReg;d++)
 			{
-				lim_fractions = new double[3];
-				lim_fractions[2] = dLimZ;
+				lim_fractions[d] = dLimits[d];
 			}
-			else
-			{
-				lim_fractions = new double[2];
-			}
-			lim_fractions[0] = dLimX;
-			lim_fractions[1] = dLimY;
-			
 		}
-
 		
+		//convert to RAI
 		final Img< FloatType > image_in = ImagePlusAdapter.convertFloat(imp1);
 		final Img< FloatType > template_in = ImagePlusAdapter.convertFloat(imp2);
 		GenNormCC normCC = new GenNormCC();
@@ -263,13 +245,10 @@ public class RegisterNDFFT implements PlugIn, DialogListener
 		if(multiCh)
 		{			
 			bNormCCcalc= normCC.caclulateGenNormCC(Views.hyperSlice(image_in, 2, regChannel1), Views.hyperSlice(template_in, 2, regChannel2), bShowCC);//, bRegisterTemplate);
-			
-			//finData=GenNormCC.caclulateGenNormCC(Views.hyperSlice(image_in, 2, regChannel1), Views.hyperSlice(template_in, 2, regChannel2), dMaxFraction , bShowCC);//, bRegisterTemplate);
 		}
 		else					
 		{
 			bNormCCcalc = normCC.caclulateGenNormCC(image_in, template_in, bShowCC);//, bRegisterTemplate);	
-			//finData=GenNormCC.caclulateGenNormCC(image_in, template_in, dMaxFraction , bShowCC);//, bRegisterTemplate);
 		}
 		if(!bNormCCcalc)
 		{
@@ -280,15 +259,11 @@ public class RegisterNDFFT implements PlugIn, DialogListener
 		
 
 		ResultsTable ptable = ResultsTable.getResultsTable();
-		//RegisterTranslation reg = new RegisterTranslation(image_in.numDimensions());
-		
-		//reg.registerTranslation(image_in, template_in);
-		//ptable_lock.lock();
 		ptable.incrementCounter();
 		ptable.addValue("norm_CC_coeff", normCC.dMaxCC);
-		for(i=0;i<finShift.length;i++)
+		for(d=0;d<finShift.length;d++)
 		{
-			ptable.addValue("shift_coord_"+Integer.toString(i),finShift[i]);	
+			ptable.addValue("shift_coord_"+Integer.toString(d),finShift[d]);	
 		}
 		ptable.show("Results");
 		
@@ -296,7 +271,7 @@ public class RegisterNDFFT implements PlugIn, DialogListener
 		{
 				registerShowTemplate(finShift,template_in,image_in, imp2.getTitle(),imp2.getCalibration(),multiCh);
 		}
-		//ptable_lock.unlock();
+
 	}
 	
 	private void registerShowTemplate(final long[] finData, final Img<FloatType> template, final Img<FloatType> image, final String sTitle, final Calibration cal, final boolean bCh) 
@@ -323,8 +298,12 @@ public class RegisterNDFFT implements PlugIn, DialogListener
 		
 		registeredIP.show();
 	}
+	
+	
 	@Override
 	public boolean dialogItemChanged(GenericDialog gd, AWTEvent e) {
+		
+		int d;
 		
 		if(e!=null)
 		{
@@ -337,43 +316,27 @@ public class RegisterNDFFT implements PlugIn, DialogListener
 				switch (limit.getSelectedIndex())
 				{
 					case 0:
-						xName.setText("No X limit");										
-						yName.setText("No Y limit");
-						xVal.setEnabled(false);
-						yVal.setEnabled(false);
-						if(bZPresent)
+						for(d=0;d<nDimReg;d++)
 						{
-							zName.setText("No Z limit");
-							zVal.setEnabled(false);
+							limName[d].setText("No "+sDims.charAt(d)+" limit");
+							limVal[d].setEnabled(false);
 						}
 						break;
 					case 1:
-						xName.setText("X limit (px)");
-						yName.setText("Y limit (px)");
-						xVal.setEnabled(true);
-						yVal.setEnabled(true);
-						xVal.setText(df1.format(Prefs.get("RegisterNDFFT.dMaxXpx", 10.0)));
-						yVal.setText(df1.format(Prefs.get("RegisterNDFFT.dMaxYpx", 10.0)));
-						if(bZPresent)
+						for(d=0;d<nDimReg;d++)
 						{
-							zName.setText("Z limit (px)");
-							
-							zVal.setEnabled(true);
-							zVal.setText(df1.format(Prefs.get("RegisterNDFFT.dMaxZpx", 10.0)));
+							limName[d].setText(sDims.charAt(d)+" limit (px)");
+							limVal[d].setEnabled(true);
+							limVal[d].setText(df1.format(Prefs.get("RegisterNDFFT.dMax"+sDims.charAt(d)+"px", 10.0)));
 						}
 						break;
 					case 2:
-						xName.setText("X limit (0-1)");
-						yName.setText("Y limit (0-1)");
-						xVal.setEnabled(true);
-						yVal.setEnabled(true);
-						xVal.setText(df1.format( Prefs.get("RegisterNDFFT.dMaxXfr", 0.5)));
-						yVal.setText(df1.format( Prefs.get("RegisterNDFFT.dMaxYfr", 0.5)));
-						if(bZPresent)
+						for(d=0;d<nDimReg;d++)
 						{
-							zName.setText("Z limit (0-1)");
-							zVal.setEnabled(true);
-							zVal.setText(df1.format( Prefs.get("RegisterNDFFT.dMaxZfr", 0.5)));
+							limName[d].setText(sDims.charAt(d)+" limit (0-1)");
+							limVal[d].setEnabled(true);
+							limVal[d].setText(df1.format(Prefs.get("RegisterNDFFT.dMax"+sDims.charAt(d)+"fr", 0.5)));
+
 						}
 						break;
 				}
