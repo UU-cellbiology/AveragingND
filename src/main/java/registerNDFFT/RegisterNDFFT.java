@@ -190,7 +190,6 @@ public class RegisterNDFFT implements PlugIn, DialogListener
 		Prefs.set("RegisterNDFFT.sConstrain", limitsReg[nConstrainReg]);
 		if(nConstrainReg!=0)
 		{
-
 			if(nConstrainReg == 1)
 			{
 				for(d=0;d<nDimReg;d++)

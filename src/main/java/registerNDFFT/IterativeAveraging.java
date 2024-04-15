@@ -1,6 +1,10 @@
 package registerNDFFT;
 
 
+import java.awt.AWTEvent;
+import java.awt.Choice;
+import java.awt.Label;
+import java.awt.TextField;
 import java.text.DecimalFormat;
 import java.text.DecimalFormatSymbols;
 import java.util.ArrayList;
@@ -10,12 +14,14 @@ import ij.IJ;
 import ij.ImageJ;
 import ij.ImagePlus;
 import ij.Prefs;
+import ij.gui.DialogListener;
 import ij.gui.GenericDialog;
 import ij.io.DirectoryChooser;
 import ij.measure.ResultsTable;
 import ij.plugin.PlugIn;
 
 import net.imglib2.Cursor;
+import net.imglib2.FinalInterval;
 import net.imglib2.RandomAccessibleInterval;
 import net.imglib2.img.Img;
 import net.imglib2.img.array.ArrayImgs;
@@ -23,18 +29,18 @@ import net.imglib2.type.numeric.real.FloatType;
 import net.imglib2.view.IntervalView;
 import net.imglib2.view.Views;
 
-public class IterativeAveraging implements PlugIn {
+public class IterativeAveraging implements PlugIn, DialogListener {
 
 	public int nIterN = 0;
-
-	public double dMaxFraction = 0.5;
 
 	public boolean bShowIntermediateAverage=false;
 
 	public int nIniTemplate = 0;
 	
 	public int nInput = 0;
+
 	public boolean bExcludeZeros = false;
+	
 	public boolean bOutputInput = false;
 
 	
@@ -47,11 +53,21 @@ public class IterativeAveraging implements PlugIn {
 	/** set of images for averaging and information about them **/
 	ImageSet imageSet;
 	
+	public int nConstrainReg = 0;
+	Label [] limName;
+	TextField [] limVal;
+	/** dimensions of dataset for averaging (always 1 channel) **/
+	int nDimReg;
+	/** format of the input dataset XYZTC **/
+	String sDims;
+	
 	@Override
 	public void run(String paramString) {
 	
 		int i,j,k, iter;
-	
+		int d;
+		
+		double [] dLimits;
 		
 		//final String[] sIniTemplate = new String[3];
 		final String[] sIniTemplate = new String[2];
@@ -63,36 +79,19 @@ public class IterativeAveraging implements PlugIn {
 		sInput[0] = "All currently open images";
 		sInput[1] = "Specify images in a folder";
 		
-		final GenericDialog gd = new GenericDialog( "Iterative registration" );
+		final GenericDialog gdFiles = new GenericDialog( "Iterative registration" );
 
-		gd.addChoice( "Input images:", sInput, Prefs.get("RegisterNDFFT.IA.nInput", sInput[0]) );
-		gd.addChoice( "Initial template:", sIniTemplate, Prefs.get("RegisterNDFFT.IA.nIniTemplate", sIniTemplate[0]) );
-		gd.addNumericField("Number of iterations", Prefs.get("RegisterNDFFT.IA.nIterN",10),0);
-		gd.addCheckbox("Exclude zero values?", Prefs.get("RegisterNDFFT.IA.bExcludeZeros", false));	
-		gd.addNumericField("Maximum shift (fraction, 0-1 range)", Prefs.get("RegisterNDFFT.IA.dMaxFraction", 0.4), 3);
-		gd.addCheckbox("Show intermediate average", Prefs.get("RegisterNDFFT.IA.bShowIntermediateAverage",false));
-		gd.addCheckbox("Output registered inputs?", Prefs.get("RegisterNDFFT.IA.bOutputInput",false));
-		gd.showDialog();
+		gdFiles.addChoice( "Input images:", sInput, Prefs.get("RegisterNDFFT.IA.nInput", sInput[0]) );
+		gdFiles.showDialog();
 		
-		if ( gd.wasCanceled() )
+		if ( gdFiles.wasCanceled() )
 			return;				
 
-		nInput = gd.getNextChoiceIndex();
+		nInput = gdFiles.getNextChoiceIndex();
 		Prefs.set("RegisterNDFFT.IA.nInput", sInput[nInput]);
-		nIniTemplate = gd.getNextChoiceIndex();
-		Prefs.set("RegisterNDFFT.IA.nIniTemplate", sIniTemplate[nIniTemplate]);
-		nIterN  = (int)gd.getNextNumber();
-		Prefs.set("RegisterNDFFT.IA.nIterN", nIterN);
-		bExcludeZeros  = gd.getNextBoolean();
-		Prefs.set("RegisterNDFFT.IA.bExcludeZeros", bExcludeZeros);
-		dMaxFraction  = gd.getNextNumber();
-		Prefs.set("RegisterNDFFT.IA.dMaxFraction", dMaxFraction);
-		bShowIntermediateAverage = gd.getNextBoolean();
-		Prefs.set("RegisterNDFFT.IA.bShowIntermediateAverage", bShowIntermediateAverage);
-		bOutputInput = gd.getNextBoolean();
-		Prefs.set("RegisterNDFFT.IA.bOutputInput", bOutputInput);
 		
 		imageSet = new ImageSet();
+		
 		//init arrays			
 		imgs_shift = new ArrayList<RandomAccessibleInterval< FloatType >>();
 		shifts = new ArrayList<long []>();
@@ -109,29 +108,129 @@ public class IterativeAveraging implements PlugIn {
 			if(!imageSet.initializeFromDisk(sPath, ".tif"))
 				return;
 		}
+		
+		sDims = imageSet.sRefDims;
+		
+		nDimReg = sDims.length();
 		if(imageSet.bMultiCh)
 		{
-			final GenericDialog gdCh = new GenericDialog( "Choose registration channel" );
+			nDimReg--; //remove the C component
+		}
+		limName = new Label[nDimReg];
+		limVal = new TextField[nDimReg];
+		dLimits = new double [nDimReg];
 		
+		final String[] limitsReg = new String[  ] {"No","by voxels", "by image fraction"};
+		final GenericDialog gd1 = new GenericDialog( "Averaging parameters" );
+		if(imageSet.bMultiCh)
+		{
 			final String[] channels = new String[ imageSet.nChannels];
 			for ( int c = 0; c < channels.length; ++c )
 				channels[ c ] = "use channel " + Integer.toString(c+1);
-			gdCh.addChoice( "For alignment", channels, channels[ 0 ] );
-			gdCh.showDialog();
-			
-			if ( gdCh.wasCanceled() )
-				return;				
-	
-			imageSet.alignChannel = gdCh.getNextChoiceIndex();
+			gd1.addChoice( "For alignment", channels, channels[ 0 ] );
 		}
+		gd1.addChoice( "Initial template:", sIniTemplate, Prefs.get("RegisterNDFFT.IA.nIniTemplate", sIniTemplate[0]) );
+		gd1.addNumericField("Number of iterations", Prefs.get("RegisterNDFFT.IA.nIterN",10),0);
+		gd1.addCheckbox("Exclude zero values?", Prefs.get("RegisterNDFFT.IA.bExcludeZeros", false));		
+		gd1.addCheckbox("Show intermediate average", Prefs.get("RegisterNDFFT.IA.bShowIntermediateAverage",false));
+		gd1.addCheckbox("Output registered inputs?", Prefs.get("RegisterNDFFT.IA.bOutputInput",false));
+		String sCurrChoice = Prefs.get("RegisterNDFFT.IA.sConstrain", "No");
+		gd1.addChoice("Constrain registration?", limitsReg, sCurrChoice);
+		for (d=0;d<nDimReg;d++)
+		{
+			switch (sCurrChoice)
+			{
+				case "No":
+					gd1.addNumericField("No max "+sDims.charAt(d)+" limit", 0.0, 3);
+					break;
+				case "by voxels":
+					gd1.addNumericField(sDims.charAt(d)+" limit (px)", Prefs.get("RegisterNDFFT.IA.dMax"+sDims.charAt(d)+"px", 10.0), 3);
+					break;
+				case "by image fraction":
+					gd1.addNumericField(sDims.charAt(d)+" limit (0-1)", Prefs.get("RegisterNDFFT.IA.dMax"+sDims.charAt(d)+"fr", 0.5), 3);
+					break;
+					
+			}
+			limName[d] = gd1.getLabel();
+			limVal[d] = (TextField)gd1.getNumericFields().get(d+1);	
+			if(sCurrChoice.equals("No"))
+			{
+				limVal[d].setEnabled(false);
+			}
+		}
+		gd1.addDialogListener(this);
+		gd1.showDialog();
+		
+		if ( gd1.wasCanceled() )
+			return;
+		
+		if(imageSet.bMultiCh)
+		{
+			imageSet.alignChannel = gd1.getNextChoiceIndex();
+		}
+		nIniTemplate = gd1.getNextChoiceIndex();
+		Prefs.set("RegisterNDFFT.IA.nIniTemplate", sIniTemplate[nIniTemplate]);
+		nIterN  = (int)gd1.getNextNumber();
+		Prefs.set("RegisterNDFFT.IA.nIterN", nIterN);
+		bExcludeZeros  = gd1.getNextBoolean();
+		Prefs.set("RegisterNDFFT.IA.bExcludeZeros", bExcludeZeros);
+		bShowIntermediateAverage = gd1.getNextBoolean();
+		Prefs.set("RegisterNDFFT.IA.bShowIntermediateAverage", bShowIntermediateAverage);
+		bOutputInput = gd1.getNextBoolean();
+		Prefs.set("RegisterNDFFT.IA.bOutputInput", bOutputInput);
+		nConstrainReg = gd1.getNextChoiceIndex();
+		Prefs.set("RegisterNDFFT.sConstrain", limitsReg[nConstrainReg]);
+		
+		if(nConstrainReg!=0)
+		{
+			if(nConstrainReg == 1)
+			{
+				for(d=0;d<nDimReg;d++)
+				{
+					dLimits[d]=Math.abs(gd1.getNextNumber());
+					Prefs.set("RegisterNDFFT.dMax"+sDims.charAt(d)+"px",dLimits[d]);
+				}
+				
+			}
+			else
+			{
+				for(d=0;d<nDimReg;d++)
+				{
+					dLimits[d]=Math.min(Math.abs(gd1.getNextNumber()), 1.0);
+					Prefs.set("RegisterNDFFT.dMax"+sDims.charAt(d)+"fr",dLimits[d]);
+				}
+			}
+		}
+		double [] lim_fractions = null;
+		FinalInterval limInterval = null;
+		if(nConstrainReg == 1)
+		{
+			long[] minI = new long [nDimReg];
+			long[] maxI = new long [nDimReg];
+			for(d=0;d<nDimReg;d++)
+			{
+				maxI[d] = (long) dLimits[d];
+				minI[d] = (long) ((-1.0)*dLimits[d]);
+			}
+			limInterval = new FinalInterval(minI, maxI);
+		}
+		if(nConstrainReg == 2)
+		{
+			lim_fractions = new double [nDimReg];
+			for(d=0;d<nDimReg;d++)
+			{
+				lim_fractions[d] = dLimits[d];
+			}
+		}
+		
+		
 		
 		if(!imageSet.loadAllImages())
 			return;
 		
 		final int nImageN = imageSet.nImageN;
-		// case nIniTemplate ==1 automatically happens during image loading
-		//for ==0 we need to generate new array
-
+		
+		//initial shifts depending on template choice
 		shifts = initShifts(imageSet.imgs, nIniTemplate);
 		
 		//create a new shifted array of images
@@ -150,7 +249,9 @@ public class IterativeAveraging implements PlugIn {
 		GenNormCC normCC = new GenNormCC();
 		normCC.bVerbose = false;
 		normCC.bExcludeZeros=bExcludeZeros;
-
+		normCC.lim_fractions = lim_fractions;
+		normCC.limInterval = limInterval;
+		
 		ResultsTable ptable = ResultsTable.getResultsTable();
 		ptable.reset();
 		ResultsTable ptableCC = new ResultsTable();
@@ -170,13 +271,13 @@ public class IterativeAveraging implements PlugIn {
 		double [] listCC = new double[nImageN];
 		
 		double maxAverCC = (-1)*Double.MAX_VALUE;
-		final int dimShift = imageSet.imgs.get(0).numDimensions(); 
+		//final int dimShift = imageSet.imgs.get(0).numDimensions(); 
 		int nIterMax = 0;
 		ArrayList<long []> maxAverCCshifts = new ArrayList<long []>();
 		
 		for(i=0;i<nImageN;i++)
 		{
-			maxAverCCshifts.add(new long[dimShift]);
+			maxAverCCshifts.add(new long[nDimReg]);
 		}
 		
 		DecimalFormatSymbols symbols = new DecimalFormatSymbols();
@@ -198,7 +299,7 @@ public class IterativeAveraging implements PlugIn {
 				currAverageImg = removeOneAverage(sumAndCount,imgs_shift.get(i));
 				//ImageJFunctions.show(currAverageImg, "aver"+Integer.toString(i+1));
 				//removeOneAverage
-				normCC.caclulateGenNormCC(Views.zeroMin(currAverageImg), imageSet.imgs.get(i), dMaxFraction , false);
+				normCC.caclulateGenNormCC(Views.zeroMin(currAverageImg), imageSet.imgs.get(i), false);
 				
 				avrgCC+=normCC.dMaxCC;
 				listCC[i]=normCC.dMaxCC;
@@ -223,7 +324,7 @@ public class IterativeAveraging implements PlugIn {
 				nIterMax = iter+1;
 				for(i=0;i<nImageN;i++)
 				{
-					for(int d=0;d<dimShift;d++)
+					for(d=0;d<nDimReg;d++)
 					{
 						maxAverCCshifts.get(i)[d] = shiftsOut[i][d];
 					}
@@ -502,7 +603,53 @@ public class IterativeAveraging implements PlugIn {
 		}
 		
 	}
-	
+	@Override
+	public boolean dialogItemChanged(GenericDialog gd, AWTEvent e) {
+		int d;
+		
+		if(e!=null)
+		{
+			DecimalFormatSymbols symbols = new DecimalFormatSymbols();
+			symbols.setDecimalSeparator('.');
+			DecimalFormat df1 = new DecimalFormat ("#.##", symbols);
+			int nCh = 1;
+			if(imageSet.bMultiCh)
+				nCh = 2;
+			Choice limit = (Choice) gd.getChoices().get(nCh);
+			if(e.getSource()==limit)
+			{
+				switch (limit.getSelectedIndex())
+				{
+					case 0:
+						for(d=0;d<nDimReg;d++)
+						{
+							limName[d].setText("No "+sDims.charAt(d)+" limit");
+							limVal[d].setEnabled(false);
+						}
+						break;
+					case 1:
+						for(d=0;d<nDimReg;d++)
+						{
+							limName[d].setText(sDims.charAt(d)+" limit (px)");
+							limVal[d].setEnabled(true);
+							limVal[d].setText(df1.format(Prefs.get("RegisterNDFFT.IA.dMax"+sDims.charAt(d)+"px", 10.0)));
+						}
+						break;
+					case 2:
+						for(d=0;d<nDimReg;d++)
+						{
+							limName[d].setText(sDims.charAt(d)+" limit (0-1)");
+							limVal[d].setEnabled(true);
+							limVal[d].setText(df1.format(Prefs.get("RegisterNDFFT.IA.dMax"+sDims.charAt(d)+"fr", 0.5)));
+
+						}
+						break;
+				}
+			}
+		}
+		return true;
+	}
+		
 	public static void main( final String[] args )
 	{
 		// open an ImageJ window
@@ -513,5 +660,6 @@ public class IterativeAveraging implements PlugIn {
 		it.run(null);
 
 	}
-	
+
+
 }

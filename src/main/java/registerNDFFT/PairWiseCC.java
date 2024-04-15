@@ -27,6 +27,7 @@ public class PairWiseCC implements PlugIn {
 	public void run(String arg) {
 		int i,j,k;
 		
+		
 		final String[] sInput = new String[2];
 		sInput[0] = "All currently open images";
 		sInput[1] = "Specify images in a folder";
