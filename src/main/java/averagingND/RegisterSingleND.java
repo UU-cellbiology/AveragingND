@@ -36,7 +36,7 @@ import net.imglib2.view.Views;
  * @author Eugene Katrukha
  * 
  */
-public class RegisterNDFFT implements PlugIn, DialogListener
+public class RegisterSingleND implements PlugIn, DialogListener
 {
 	
 	public static int defaultImg1 = 0;
@@ -355,7 +355,7 @@ public class RegisterNDFFT implements PlugIn, DialogListener
 		IJ.open("/home/eugene/Desktop/projects/RegisterNDFFT/4d/HyperStack.tif");
 		IJ.open("/home/eugene/Desktop/projects/RegisterNDFFT/4d/HyperStack-1.tif");
 		
-		RegisterNDFFT test = new RegisterNDFFT();
+		RegisterSingleND test = new RegisterSingleND();
 		test.run(null);
 		
 		// open with SCIFIO ImgOpener as FloatTypes
