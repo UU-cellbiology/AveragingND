@@ -1,4 +1,7 @@
-# AveragingND
+[![](https://github.com/ekatrukha/AveragingND/actions/workflows/build-main.yml/badge.svg)](https://github.com/ekatrukha/AveragingND/actions/workflows/build-main.yml)
+
+AveragingND
+===
 
 Averaging of ND (2/3/4D) images using normalized cross-correlation.   
 Work in progress, use at your own risk.  

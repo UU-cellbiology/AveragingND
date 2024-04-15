@@ -257,7 +257,7 @@ public class ImageSet {
 	}
 	
 
-	/**given the path to folder and file extension, returns List<String> of filenames **/
+	/**given the path to folder and file extension, returns List of filenames strings **/
 	public static List<String> getFilenamesFromFolder(final String sFolderPath, final String fileExtension)    
 			throws IOException {
 		final Path path = Paths.get(sFolderPath);

@@ -79,7 +79,7 @@ public class AverageWithoutZero implements PlugIn {
 	/** function calculates average image from the provided ArrayList of RAI intervals.
 	 * The output image is extended to cover all intervals. Intervals are extended with zeros
 	 * to the same extent.
-	 * If bIgnoreZeros is true, it does not include in the averaging pixel values > 0.0000001
+	 * If bIgnoreZeros is true, it does not include in the averaging pixel values below 0.0000001
 	 * **/
 	public static IntervalView<FloatType> averageArray(final ArrayList<RandomAccessibleInterval< FloatType >> imgs, final boolean bIgnoreZero)
 	{
@@ -144,7 +144,7 @@ public class AverageWithoutZero implements PlugIn {
 	 * and an average image RAI. 
 	 * The output image is extended to cover all intervals. Intervals are extended with zeros
 	 * to the same extent.
-	 * If bIgnoreZeros is true, it does not include in the averaging pixel values > 0.0000001
+	 * If bIgnoreZeros is true, it does not include in the averaging pixel values below 0.0000001
 	 * **/
 	public static IntervalView<FloatType> stdArray(final ArrayList<RandomAccessibleInterval< FloatType >> imgs, final RandomAccessibleInterval< FloatType > avrgRAI, final boolean bIgnoreZero)
 	{
