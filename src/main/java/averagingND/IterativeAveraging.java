@@ -52,8 +52,13 @@ public class IterativeAveraging implements PlugIn, DialogListener {
 	
 	/** set of images for averaging and information about them **/
 	ImageSet imageSet;
-	
+	/** constrains during the averaging
+	 * 0 - no constrains
+	 * 1 - constrains in pixels
+	 * 2 - constrains as a fraction of max displacement 
+	 * **/
 	public int nConstrainReg = 0;
+	
 	Label [] limName;
 	TextField [] limVal;
 	/** dimensions of dataset for averaging (always 1 channel) **/
@@ -69,6 +74,11 @@ public class IterativeAveraging implements PlugIn, DialogListener {
 		
 		double [] dLimits;
 		
+		//double format formatting toold
+		DecimalFormatSymbols symbols = new DecimalFormatSymbols();
+		symbols.setDecimalSeparator('.');
+		DecimalFormat df = new DecimalFormat ("#.########", symbols);
+		DecimalFormat df1 = new DecimalFormat ("#.#", symbols);
 		
 		final String[] sInput = new String[2];
 		sInput[0] = "All currently open images";
@@ -80,7 +90,8 @@ public class IterativeAveraging implements PlugIn, DialogListener {
 		gdFiles.showDialog();
 		
 		if ( gdFiles.wasCanceled() )
-			return;				
+			return;			
+		IJ.log("Iterative ND averaging plugin, version " + ConstantsAveragingND.sVersion);
 
 		nInput = gdFiles.getNextChoiceIndex();
 		Prefs.set("RegisterNDFFT.IA.nInput", sInput[nInput]);
@@ -181,22 +192,40 @@ public class IterativeAveraging implements PlugIn, DialogListener {
 		{
 			if(nConstrainReg == 1)
 			{
+				IJ.log("Averaging with constrain specified in voxels:");
+
 				for(d=0;d<nDimReg;d++)
 				{
 					dLimits[d]=Math.abs(gd1.getNextNumber());
 					Prefs.set("RegisterNDFFT.IA.dMax"+sDims.charAt(d)+"px",dLimits[d]);
+					IJ.log("Axis " +sDims.charAt(d)+": "+df1.format(dLimits[d])+" pixels");
 				}
 				
 			}
 			else
 			{
+				IJ.log("Averaging with constrain specified as a fraction of max displacement:");
 				for(d=0;d<nDimReg;d++)
 				{
 					dLimits[d]=Math.min(Math.abs(gd1.getNextNumber()), 1.0);
 					Prefs.set("RegisterNDFFT.IA.dMax"+sDims.charAt(d)+"fr",dLimits[d]);
+					IJ.log("Axis " +sDims.charAt(d)+": "+df1.format(dLimits[d]));
 				}
 			}
 		}
+		else
+		{
+			IJ.log("Averaging without constrains.");
+		}
+		if(bExcludeZeros)
+		{
+			IJ.log("Excluding zeros: true.");
+		}
+		else
+		{
+			IJ.log("Excluding zeros: false.");			
+		}
+		
 		double [] lim_fractions = null;
 		FinalInterval limInterval = null;
 		if(nConstrainReg == 1)
@@ -276,10 +305,7 @@ public class IterativeAveraging implements PlugIn, DialogListener {
 			maxAverCCshifts.add(new long[nDimReg]);
 		}
 		
-		DecimalFormatSymbols symbols = new DecimalFormatSymbols();
-		symbols.setDecimalSeparator('.');
-		DecimalFormat df = new DecimalFormat ("#.########", symbols);
-		DecimalFormat df1 = new DecimalFormat ("#.#", symbols);
+
 		
 		long iterStartT, iterEndT;
 		
