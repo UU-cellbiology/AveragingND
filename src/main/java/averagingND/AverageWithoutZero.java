@@ -140,7 +140,7 @@ public class AverageWithoutZero implements PlugIn {
 
 	}
 	
-	/** function calculates stendard deviation image from the provided ArrayList of RAI intervals
+	/** function calculates standard deviation image from the provided ArrayList of RAI intervals
 	 * and an average image RAI. 
 	 * The output image is extended to cover all intervals. Intervals are extended with zeros
 	 * to the same extent.

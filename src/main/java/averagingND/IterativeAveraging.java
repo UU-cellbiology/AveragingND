@@ -31,27 +31,44 @@ import net.imglib2.view.Views;
 
 public class IterativeAveraging implements PlugIn, DialogListener {
 
-	public int nIterN = 0;
-
-	public boolean bShowIntermediateAverage=false;
-
-	public int nIniTemplate = 0;
 	
-	public int nInput = 0;
-
-	public boolean bExcludeZeros = false;
-	
-	public boolean bOutputInput = false;
-
+	/** set of images for averaging and information about them **/
+	ImageSet imageSet;
 	
 	/** shifted images for average calculation**/
 	ArrayList<RandomAccessibleInterval< FloatType >> imgs_shift;
 	
-	/** shift of each image **/
+	/** ND shift of each image **/
 	ArrayList<long []> shifts;
 	
-	/** set of images for averaging and information about them **/
-	ImageSet imageSet;
+	/** source of images 
+	 * 0 - images currently open in ImageJ 
+	 * 1 - tif files on disk **/
+	public int nInputType = 0;
+	
+	/** initial template (alignment of images)
+	 * 0 - centered images
+	 * 1 - zero, origin of coordinates
+	 * **/
+	public int nIniTemplate = 0;
+	
+	/** total number of iterations **/
+	public int nIterN = 0;
+
+	/** whether or not generate intermediate average **/
+	boolean bIntermediateAverage = false;
+	
+	boolean bSaveIntermediate = false;
+	
+	String sPathIntermediate = "";
+
+	public boolean bExcludeZeros = false;
+	
+	public boolean bOutputInput = false;
+	
+	/** for now it cannot be changed by user **/
+	public boolean bIgnoreZeroInAveraging = true;
+
 	/** constrains during the averaging
 	 * 0 - no constrains
 	 * 1 - constrains in pixels
@@ -59,10 +76,15 @@ public class IterativeAveraging implements PlugIn, DialogListener {
 	 * **/
 	public int nConstrainReg = 0;
 	
+	/** labels of constrain axes **/
 	Label [] limName;
+	
+	/** values of constrain axes **/
 	TextField [] limVal;
+	
 	/** dimensions of dataset for averaging (always 1 channel) **/
 	int nDimReg;
+	
 	/** format of the input dataset XYZTC **/
 	String sDims;
 	
@@ -73,6 +95,8 @@ public class IterativeAveraging implements PlugIn, DialogListener {
 		int d;
 		
 		double [] dLimits;
+		
+		ArrayList<RandomAccessibleInterval< FloatType >> imgs_avrg_out;
 		
 		//double format formatting toold
 		DecimalFormatSymbols symbols = new DecimalFormatSymbols();
@@ -93,8 +117,8 @@ public class IterativeAveraging implements PlugIn, DialogListener {
 			return;			
 		IJ.log("Iterative ND averaging plugin, version " + ConstantsAveragingND.sVersion);
 
-		nInput = gdFiles.getNextChoiceIndex();
-		Prefs.set("RegisterNDFFT.IA.nInput", sInput[nInput]);
+		nInputType = gdFiles.getNextChoiceIndex();
+		Prefs.set("RegisterNDFFT.IA.nInput", sInput[nInputType]);
 		
 		imageSet = new ImageSet();
 		
@@ -102,7 +126,7 @@ public class IterativeAveraging implements PlugIn, DialogListener {
 		imgs_shift = new ArrayList<RandomAccessibleInterval< FloatType >>();
 		shifts = new ArrayList<long []>();
 
-		if(nInput == 0)
+		if(nInputType == 0)
 		{
 			if(!imageSet.initializeFromOpenWindows())
 				return;	 
@@ -139,7 +163,8 @@ public class IterativeAveraging implements PlugIn, DialogListener {
 		gd1.addChoice( "Initial template:", sIniTemplate, Prefs.get("RegisterNDFFT.IA.nIniTemplate", sIniTemplate[0]) );
 		gd1.addNumericField("Number of iterations", Prefs.get("RegisterNDFFT.IA.nIterN",10),0);
 		gd1.addCheckbox("Exclude zero values?", Prefs.get("RegisterNDFFT.IA.bExcludeZeros", false));		
-		gd1.addCheckbox("Show intermediate average", Prefs.get("RegisterNDFFT.IA.bShowIntermediateAverage",false));
+		gd1.addCheckbox("Show intermediate average?", Prefs.get("RegisterNDFFT.IA.bShowIntermediateAverage",false));
+		gd1.addCheckbox("If yes, save intermediate on disk?", Prefs.get("RegisterNDFFT.IA.bSaveIntermediate",false));
 		gd1.addCheckbox("Output registered inputs?", Prefs.get("RegisterNDFFT.IA.bOutputInput",false));
 		String sCurrChoice = Prefs.get("RegisterNDFFT.IA.sConstrain", "No");
 		gd1.addChoice("Constrain registration?", limitsReg, sCurrChoice);
@@ -181,8 +206,10 @@ public class IterativeAveraging implements PlugIn, DialogListener {
 		Prefs.set("RegisterNDFFT.IA.nIterN", nIterN);
 		bExcludeZeros  = gd1.getNextBoolean();
 		Prefs.set("RegisterNDFFT.IA.bExcludeZeros", bExcludeZeros);
-		bShowIntermediateAverage = gd1.getNextBoolean();
-		Prefs.set("RegisterNDFFT.IA.bShowIntermediateAverage", bShowIntermediateAverage);
+		bIntermediateAverage = gd1.getNextBoolean();
+		Prefs.set("RegisterNDFFT.IA.bShowIntermediateAverage", bIntermediateAverage);
+		bSaveIntermediate = gd1.getNextBoolean();
+		Prefs.set("RegisterNDFFT.IA.bSaveIntermediate", bSaveIntermediate);
 		bOutputInput = gd1.getNextBoolean();
 		Prefs.set("RegisterNDFFT.IA.bOutputInput", bOutputInput);
 		nConstrainReg = gd1.getNextChoiceIndex();
@@ -247,11 +274,19 @@ public class IterativeAveraging implements PlugIn, DialogListener {
 				lim_fractions[d] = dLimits[d];
 			}
 		}
-		
+		if(bIntermediateAverage && bSaveIntermediate)
+		{
+			DirectoryChooser dc = new DirectoryChooser ( "Choose a folder to save intermediate averages..." );
+			sPathIntermediate = dc.getDirectory();
+			if(sPathIntermediate == null)
+				return;
+			
+		}
 		
 		
 		if(!imageSet.loadAllImages())
 			return;
+		IJ.log("Running for "+Integer.toString(nIterN)+" iterations.");
 		
 		final int nImageN = imageSet.nImageN;
 		
@@ -266,16 +301,17 @@ public class IterativeAveraging implements PlugIn, DialogListener {
 		sumAndCount = AverageWithoutZero.sumAndCountArray(imgs_shift);
 
 		IntervalView<FloatType> currAverageImg;
-		if(bShowIntermediateAverage)
+		if(bIntermediateAverage)
 		{		
-			MiscUtils.wrapFloatImgCal(AverageWithoutZero.averageFromSumAndCount(sumAndCount), "average iteration 0", imageSet.cal, false).show();
+			processIntermediate(0);
 		}
 		
 		GenNormCC normCC = new GenNormCC();
 		normCC.bVerbose = false;
-		normCC.bExcludeZeros=bExcludeZeros;
+		normCC.bExcludeZeros = bExcludeZeros;
 		normCC.lim_fractions = lim_fractions;
 		normCC.limInterval = limInterval;
+		normCC.bCenteredLimit = true;
 		
 		ResultsTable ptable = ResultsTable.getResultsTable();
 		ptable.reset();
@@ -304,8 +340,6 @@ public class IterativeAveraging implements PlugIn, DialogListener {
 		{
 			maxAverCCshifts.add(new long[nDimReg]);
 		}
-		
-
 		
 		long iterStartT, iterEndT;
 		
@@ -392,9 +426,9 @@ public class IterativeAveraging implements PlugIn, DialogListener {
 			}
 			IJ.log("Iteration "+Integer.toString(iter+1)+" average CC " + df.format(avrgCC) +sTimeEl);			
 			
-			if(bShowIntermediateAverage)
+			if(bIntermediateAverage)
 			{
-				MiscUtils.wrapFloatImgCal(AverageWithoutZero.averageFromSumAndCount(sumAndCount),"average iteration "+Integer.toString(iter+1),imageSet.cal, false).show();
+				processIntermediate(iter+1);
 			}
 			
 			//check if it is converged already
@@ -428,29 +462,19 @@ public class IterativeAveraging implements PlugIn, DialogListener {
 			IJ.log("Iteration count is equal to zero, no registration was done, just averaging.");
 		}
 		
-		ArrayList<RandomAccessibleInterval< FloatType >> imgs_avrg_out; 
 		
-		if(imageSet.bMultiCh)
-		{
-			imgs_avrg_out = getMultiChAligned(shifts);
-		}
-		else
-		{
-			// calculate new img array with applied displacements	
-			imgs_avrg_out = new ArrayList<RandomAccessibleInterval< FloatType >>();
-			buildShiftedIntervals(imageSet.imgs, imgs_avrg_out,shifts);
-		}
-		
+		//calculate final average image		
 		IJ.log("calculating final average image..");
 		
-		//calculate final average image
-		IntervalView<FloatType> finalAver = AverageWithoutZero.averageArray(imgs_avrg_out, true);
-		IJ.log("...done.");
-		MiscUtils.wrapFloatImgCal(finalAver,"final_average_"+Integer.toString(nIterMax),imageSet.cal,imageSet.bMultiCh).show();
+		imgs_avrg_out = getAlignedRAI(shifts, true); 
+	
+		IntervalView<FloatType> finalAver = AverageWithoutZero.averageArray(imgs_avrg_out, bIgnoreZeroInAveraging);
 		
+		MiscUtils.wrapFloatImgCal(finalAver,"final_average_"+Integer.toString(nIterMax),imageSet.cal,imageSet.bMultiCh).show();
+		IJ.log("...done.");
 		//calculate STD image
 		IJ.log("calculating final standard deviation image..");
-		IntervalView<FloatType> finalSTD = AverageWithoutZero.stdArray(imgs_avrg_out, finalAver, true);
+		IntervalView<FloatType> finalSTD = AverageWithoutZero.stdArray(imgs_avrg_out, finalAver, bIgnoreZeroInAveraging);
 		MiscUtils.wrapFloatImgCal(finalSTD,"final_std_"+Integer.toString(nIterMax),imageSet.cal,imageSet.bMultiCh).show();
 		IJ.log("...done.");
 		
@@ -625,6 +649,22 @@ public class IterativeAveraging implements PlugIn, DialogListener {
 		}
 		
 	}
+	
+	public void processIntermediate(final int nIt)
+	{
+		ArrayList<RandomAccessibleInterval< FloatType >> imgs_avrg_out = getAlignedRAI(shifts, true); 
+		String sName = "intermediate_average_"+Integer.toString(nIt);
+		ImagePlus temp;
+		temp = MiscUtils.wrapFloatImgCal(AverageWithoutZero.averageArray(imgs_avrg_out, bIgnoreZeroInAveraging),sName,imageSet.cal,imageSet.bMultiCh);
+		if(bSaveIntermediate)
+		{
+			IJ.saveAsTiff(temp, sPathIntermediate +temp.getTitle());
+		}
+		else
+		{
+			temp.show();
+		}	
+	}
 	@Override
 	public boolean dialogItemChanged(GenericDialog gd, AWTEvent e) {
 		int d;
@@ -670,6 +710,24 @@ public class IterativeAveraging implements PlugIn, DialogListener {
 			}
 		}
 		return true;
+	}
+	
+	/** function returns aligned intervals **/
+	ArrayList<RandomAccessibleInterval< FloatType >> getAlignedRAI(final ArrayList<long []> shifts_, boolean bIgnoreZero)
+	{
+		ArrayList<RandomAccessibleInterval< FloatType >> imgs_avrg_out; 
+		
+		if(imageSet.bMultiCh)
+		{
+			imgs_avrg_out = getMultiChAligned(shifts_);
+		}
+		else
+		{
+			// calculate new img array with applied displacements	
+			imgs_avrg_out = new ArrayList<RandomAccessibleInterval< FloatType >>();
+			buildShiftedIntervals(imageSet.imgs, imgs_avrg_out,shifts_);
+		}
+		return imgs_avrg_out;
 	}
 		
 	public static void main( final String[] args )

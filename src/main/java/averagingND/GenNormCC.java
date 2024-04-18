@@ -40,15 +40,25 @@ public class GenNormCC {
 	/** whether to exclude/ignore voxels that are zeros **/	
 	public boolean bExcludeZeros = false;
 	
+	/** window limit of CC max localization as a fraction of max displacement **/
 	public double [] lim_fractions = null;
+	
+	/** absolute window limit (in voxels) of CC max localization **/
 	public FinalInterval limInterval = null;
+	
+	/** if false, the limits window of displacement applied to the origin of coordinates,
+	 * if true, it is applied around position where both images are centered **/
+	public boolean bCenteredLimit = false;
+	
+	/** the fraction of max displacement where norm CC looks ok,
+	 * the boundaries are always strange **/
 	final double max_fraction_shift = 0.9;	
 	
 	/** 
 	 * @param image
 	 * @param template
 	 */
-	public boolean caclulateGenNormCC(final RandomAccessibleInterval< FloatType > image, final RandomAccessibleInterval< FloatType > template,  final boolean bShowCC)//, boolean bRegisterTemplate) //throws ImgIOException, IncompatibleTypeException	
+	public boolean caclulateGenNormCC(final RandomAccessibleInterval< FloatType > image, final RandomAccessibleInterval< FloatType > template,  final boolean bShowCC)
 	{
 		int i;
 				
@@ -57,8 +67,6 @@ public class GenNormCC {
 			IJ.log("Error! Different dimensions of input and template!");
 			return false;
 		}
-
-
 		
 		nDim = image.numDimensions();
 		if(lim_fractions!= null)
@@ -269,84 +277,110 @@ public class GenNormCC {
 		
 		
 		long [][] cropCorr = new long[2][nDim];
+		long [][] cropFraction = new long[2][nDim];
 
-		//determine the maximum shift of template with respect to original image,
-		//assuming that zero shift is when both images' are centered 
+		//determine the maximum area (intervalCrop) of shifts for template with respect to original image
 		double nHalfSpan, nCenter;
 		
 		for(i=0;i<nDim;i++)
 		{
 			nHalfSpan = 0.5*((temDim[i]-1)+(imgDim[i]-1));
 			nCenter = nHalfSpan-(temDim[i]-1);
-			if(lim_fractions!=null)
+			cropCorr[0][i] = Math.round(nCenter-nHalfSpan*max_fraction_shift);
+			cropCorr[1][i] = Math.round(nCenter+nHalfSpan*max_fraction_shift);	
+
+			if(lim_fractions != null)
 			{
-				cropCorr[0][i]=Math.round(nCenter-nHalfSpan*lim_fractions[i]);
-				cropCorr[1][i]=Math.round(nCenter+nHalfSpan*lim_fractions[i]);				
+				cropFraction[0][i]=Math.round(-nHalfSpan*lim_fractions[i]);
+				cropFraction[1][i]=Math.round(nHalfSpan*lim_fractions[i]);				
 			}
-			else
-			{
-				cropCorr[0][i]=Math.round(nCenter-nHalfSpan*max_fraction_shift);
-				cropCorr[1][i]=Math.round(nCenter+nHalfSpan*max_fraction_shift);	
-			}
-			//cropCorr[0][i]=Math.round((-1)*((temDim[i]-1)*max_fraction_shift));
-			//cropCorr[1][i]=Math.round((imgDim[i]-1)*max_fraction_shift);	
+
 		}
-		FinalInterval intervalCrop = new FinalInterval( cropCorr[0] ,  cropCorr[1] );
-		if(limInterval!=null)
+		
+		FinalInterval intervalFull = new FinalInterval(cropCorr[0] ,  cropCorr[1]);
+		FinalInterval constrainFr = null;
+		if(lim_fractions != null)
 		{
-			intervalCrop  = Intervals.intersect(intervalCrop, limInterval);
-		}
+			constrainFr = new FinalInterval(cropFraction[0] ,  cropFraction[1]);
+		}		
+//		if(limInterval != null)
+//		{
+//			intervalCrop  = Intervals.intersect(intervalCrop, limInterval);
+//		}
 
 		//Now we need to account for the padding. Since it is changing the origin
 		//of coordinates of template with respect to the original image
 		long [] nCCOrigin = new long [nDim];
 		for(i=0;i<nDim;i++)
 		{
-			nCCOrigin[i]=(long) (Math.ceil(0.5*(imgDim[i]))- Math.ceil(0.5*(temDim[i]))); 
+			nCCOrigin[i] = (long) ( Math.ceil(0.5*(imgDim[i]))- Math.ceil(0.5*(temDim[i]))); 
 		}
+		
 		
 		//In addition, here we do so called FFT "swap quadrants" procedure (or FFT shift)
 		//to show frequencies centered/radial. So we can have negative shifts, etc
 		//Instead of truly swapping the quadrants we just periodically mirror them (extend periodic)
+		IntervalView< FloatType > ivCCswapped;
+		//full available shift space
+		ivCCswapped =  Views.interval(Views.translate(Views.extendPeriodic( invF1F2 ), nCCOrigin),intervalFull);
 		
-		IntervalView< FloatType > ivCCswapped =  Views.interval(Views.translate(Views.extendPeriodic( invF1F2 ), nCCOrigin),intervalCrop);
-		//IntervalView< FloatType > ivCCswapped =  Views.interval(Views.extendPeriodic( invF1F2 ),interval);
 		
+		
+		//let's apply constrains
+			
+		//voxel constrains
+		if(limInterval != null)
+		{
+			FinalInterval intConstrainPx; 
+			//centered, let's move to the center
+			if(bCenteredLimit)
+			{
+				intConstrainPx = Intervals.intersect(ivCCswapped, Intervals.translate(limInterval, nCCOrigin));
+				
+			}
+			//from the origin, no need to move
+			else
+			{
+				intConstrainPx = Intervals.intersect(ivCCswapped, limInterval);
+			}
+			ivCCswapped = Views.interval(ivCCswapped, intConstrainPx);
+		}
+		//fractional constrains
+		if(lim_fractions != null)
+		{
+				//centered, let's move to the center
+			if(bCenteredLimit)
+			{
+				constrainFr =  Intervals.translate(constrainFr, nCCOrigin);
+				
+			}
 
+			ivCCswapped = Views.interval(ivCCswapped, constrainFr);
+		}
+		
+		
+//		if(bCenteredLimit)
+//		{
+//			ivCCswapped =  Views.interval(Views.extendPeriodic( invF1F2 ),intervalCrop);
+//		}
+//		else
+//		{
+//			//ivCCswapped =  Views.interval(Views.extendPeriodic( invF1F2 ),intervalCrop);
+//			ivCCswapped =  Views.interval(Views.translate(Views.extendPeriodic( invF1F2 ), nCCOrigin),intervalCrop);
+//			//ivCCswapped =  Views.interval(Views.translate(Views.extendPeriodic( invF1F2 ), nCCOrigin),intervalCrop);
+//		}
+		
 		if(bShowCC)
 		{
-			//ImagePlus outIP = ImageJFunctions.wrap(ivCCswapped,"General cross-correlation");
-			//Calibration cal = outIP.getCalibration();
-			//cal.xOrigin = 
-			//outIP.show();
 			ImageJFunctions.show(ivCCswapped).setTitle( "General cross-correlation" );
-		}
-		//ImageJFunctions.show(Views.interval( Views.extendPeriodic( invF1F1I2 ),interval)).setTitle( "Denominator" );
-		
+		}		
 		
 		//now find max value
 		Point shift = new Point(nDim);
+		
 		FloatType fCCvalue;
 	
 		fCCvalue = MiscUtils.computeMaxLocation(ivCCswapped,shift);
-		
-		/*
-		else
-		{
-			//Point shiftZeroX =new Point(nDim-1);
-			long [] minX = ivCCswapped.minAsLongArray();
-			long [] maxX = ivCCswapped.maxAsLongArray();
-			minX[0]=0;
-			maxX[0]=0;
-			//minX[1]=-179;
-			//maxX[1]=180;
-			FinalInterval valX = new FinalInterval(minX,maxX);
-			//ImageJFunctions.show(Views.interval(ivCCswapped, valX)).setTitle( "XZero" );
-			
-			fCCvalue = MiscUtils.computeMaxLocation(Views.interval(ivCCswapped, valX),shift);
-	
-		}
-		*/
 		
 		if (bVerbose)
 		{
@@ -363,6 +397,14 @@ public class GenNormCC {
 		
 		// final shift of images 
 		shift.localize(dShift);
+//		if(bCenteredLimit)
+//		{
+//			//add center position
+//			for(i=0;i<nDim;i++)
+//			{
+//				dShift[i] += nCCOrigin[i];
+//			}
+//		}
 		// max of cross-correlation
 		dMaxCC = fCCvalue.get();
 

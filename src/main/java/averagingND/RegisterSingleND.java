@@ -2,7 +2,6 @@ package averagingND;
 
 
 import java.awt.AWTEvent;
-import java.awt.Checkbox;
 import java.awt.Label;
 import java.awt.TextField;
 import java.text.DecimalFormat;
@@ -53,6 +52,7 @@ public class RegisterSingleND implements PlugIn, DialogListener
 	TextField [] limVal;
 	int nDimReg;
 	String sDims;
+	boolean bCenteredLimit = false;
 
 	@Override
 	public void run(String arg) {
@@ -149,6 +149,7 @@ public class RegisterSingleND implements PlugIn, DialogListener
 		gd1.addCheckbox("Register template?", Prefs.get("RegisterNDFFT.bRegisterTemplate", false));
 		String sCurrChoice = Prefs.get("RegisterNDFFT.sConstrain", "No");
 		gd1.addChoice("Constrain registration?", limitsReg, sCurrChoice);
+	
 		
 		for (d=0;d<nDimReg;d++)
 		{
@@ -172,7 +173,7 @@ public class RegisterSingleND implements PlugIn, DialogListener
 				limVal[d].setEnabled(false);
 			}
 		}
-
+		gd1.addCheckbox("Image centered constrains?", Prefs.get("RegisterNDFFT.bCenteredLimit", false));
 
 		gd1.addDialogListener(this);
 		gd1.showDialog();
@@ -208,6 +209,9 @@ public class RegisterSingleND implements PlugIn, DialogListener
 				}
 			}
 		}
+		bCenteredLimit  = gd1.getNextBoolean();
+		Prefs.set("RegisterNDFFT.bCenteredLimit", bCenteredLimit);
+		
 		double [] lim_fractions = null;
 		FinalInterval limInterval = null;
 		if(nConstrainReg == 1)
@@ -238,6 +242,7 @@ public class RegisterSingleND implements PlugIn, DialogListener
 		
 		normCC.lim_fractions = lim_fractions;
 		normCC.limInterval = limInterval;
+		normCC.bCenteredLimit = bCenteredLimit;
 		
 		boolean bNormCCcalc=false;
 		
@@ -254,7 +259,7 @@ public class RegisterSingleND implements PlugIn, DialogListener
 			return;
 		}
 		
-		finShift= normCC.dShift;
+		finShift = normCC.dShift;
 		
 
 		ResultsTable ptable = ResultsTable.getResultsTable();
@@ -352,8 +357,11 @@ public class RegisterSingleND implements PlugIn, DialogListener
 		//IJ.open("/home/eugene/Desktop/projects/RegisterNDFFT/single/MAX_098-1.tif");
 		//IJ.open("/home/eugene/Desktop/projects/RegisterNDFFT/single/MAX_089-1.tif");
 		
-		IJ.open("/home/eugene/Desktop/projects/RegisterNDFFT/4d/HyperStack.tif");
-		IJ.open("/home/eugene/Desktop/projects/RegisterNDFFT/4d/HyperStack-1.tif");
+		//IJ.open("/home/eugene/Desktop/projects/RegisterNDFFT/4d/HyperStack.tif");
+		//IJ.open("/home/eugene/Desktop/projects/RegisterNDFFT/4d/HyperStack-1.tif");
+		IJ.open("/home/eugene/Desktop/projects/RegisterNDFFT/centered/full.tif");
+		IJ.open("/home/eugene/Desktop/projects/RegisterNDFFT/centered/center.tif");
+
 		
 		RegisterSingleND test = new RegisterSingleND();
 		test.run(null);

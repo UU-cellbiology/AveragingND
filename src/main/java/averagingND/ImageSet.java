@@ -162,7 +162,7 @@ public class ImageSet {
 			{
 				if(!bMultiCh)
 				{
-					imgs.add(ImagePlusAdapter.convertFloat(imageIn));
+					imgs.add(ImagePlusAdapter.convertFloat(imageIn));				
 				}
 				else
 				{
