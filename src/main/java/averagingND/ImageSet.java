@@ -5,6 +5,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.Objects;
 import java.util.stream.Collectors;
@@ -64,6 +65,8 @@ public class ImageSet {
 	/** text representation of dimensions in the format of XYZCT **/
 	public String sRefDims;
 	
+	/** text representation of dimensions in the format of XYCZT **/
+	public String sRefDimsIJ;
 
 	public ImageSet()
 	{
@@ -179,8 +182,46 @@ public class ImageSet {
 			}
 		}	
 
-		
-		
+		//calculate min max 
+		long [] dimsMin = new long [nDim];
+		long [] dimsMax = new long [nDim];
+		long [] currDim = new long [nDim];
+		if(!bMultiCh)
+		{
+			imgs.get(0).dimensions(dimsMin);
+			imgs.get(0).dimensions(dimsMax);
+		}
+		else
+		{
+			imgs_multiCh.get(0).dimensions(dimsMin);
+			imgs_multiCh.get(0).dimensions(dimsMax);
+		}
+		for(i=1;i<nImageN;i++)
+		{
+			if(!bMultiCh)
+			{
+				imgs.get(i).dimensions(currDim);
+			}
+			else
+			{
+				imgs_multiCh.get(i).dimensions(currDim);
+			}
+			for (int d=0;d<nDim;d++)
+			{
+				if(dimsMin[d]>currDim[d])
+				{
+					dimsMin[d] = currDim[d];
+				}
+				if(dimsMax[d]<currDim[d])
+				{
+					dimsMax[d] = currDim[d];
+				}
+			}
+		}
+		for(int d=0;d<nDim;d++)
+		{
+			IJ.log("Axis "+sRefDimsIJ.charAt(d)+" min: "+Long.toString(dimsMin[d])+" max: "+Long.toString(dimsMax[d]));
+		}
 		IJ.showProgress(2,2);
 		IJ.showStatus("Loading images..done.");	
 		if(nImageN<2)
@@ -222,6 +263,7 @@ public class ImageSet {
 	{
 		IJ.log("Analyzing dimensions:");
 		sRefDims = MiscUtils.getDimensionsText(ipFirst);
+		sRefDimsIJ = MiscUtils.getDimensionsTextImageJ(ipFirst);
 		nDim = sRefDims.length();
 		cal = ipFirst.getCalibration();
 		String sDims = "XY";
@@ -281,7 +323,7 @@ public class ImageSet {
 		} catch (IOException e) {
 			e.printStackTrace();
 		}
-
+		Collections.sort(result);
 		return result;
 	}
 	

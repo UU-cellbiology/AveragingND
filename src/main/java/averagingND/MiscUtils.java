@@ -202,4 +202,28 @@ public class MiscUtils {
 
 		return sDims;
 	}
+    /** returns dimensions of the ImagePlus in XYCZT format**/
+	public static String getDimensionsTextImageJ(final ImagePlus ip)
+	{
+		String sDims = "XY";
+		
+		if(ip.getNChannels()>1)
+		{
+			sDims = sDims + "C";
+		}
+		
+		if(ip.getNSlices()>1)
+		{
+			sDims = sDims + "Z";
+		}
+		
+		if(ip.getNFrames()>1)
+		{
+			sDims = sDims + "T";
+		}
+		
+
+
+		return sDims;
+	}
 }
