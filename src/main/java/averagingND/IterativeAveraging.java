@@ -288,7 +288,7 @@ public class IterativeAveraging implements PlugIn, DialogListener {
 		}
 		
 		
-		if(bIntermediateAverage && bSaveIntermediate)
+		if(bIntermediateAverage && bSaveIntermediate && nIterN>0)
 		{
 			DirectoryChooser dc = new DirectoryChooser ( "Choose a folder to save intermediate averages..." );
 			sPathIntermediate = dc.getDirectory();
