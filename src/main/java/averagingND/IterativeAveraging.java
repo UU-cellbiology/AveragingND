@@ -462,7 +462,7 @@ public class IterativeAveraging implements PlugIn, DialogListener {
 			}
 			IJ.log("Iteration "+Integer.toString(iter+1)+" average CC " + df.format(avrgCC) +sTimeEl);			
 			
-			if(bIntermediateAverage)
+			if(bIntermediateAverage && nIterN>0)
 			{
 				processIntermediate(iter+1);
 			}
