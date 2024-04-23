@@ -215,35 +215,69 @@ public class IterativeAveraging implements PlugIn, DialogListener {
 		nConstrainReg = gd1.getNextChoiceIndex();
 		Prefs.set("RegisterNDFFT.IA.sConstrain", limitsReg[nConstrainReg]);
 		
-		if(nConstrainReg!=0)
-		{
-			if(nConstrainReg == 1)
-			{
-				IJ.log("Averaging with constrain specified in voxels:");
+		
 
-				for(d=0;d<nDimReg;d++)
-				{
-					dLimits[d]=Math.abs(gd1.getNextNumber());
-					Prefs.set("RegisterNDFFT.IA.dMax"+sDims.charAt(d)+"px",dLimits[d]);
-					IJ.log("Axis " +sDims.charAt(d)+": "+df1.format(dLimits[d])+" pixels");
-				}
-				
-			}
-			else
-			{
-				IJ.log("Averaging with constrain specified as a fraction of max displacement:");
-				for(d=0;d<nDimReg;d++)
-				{
-					dLimits[d]=Math.min(Math.abs(gd1.getNextNumber()), 1.0);
-					Prefs.set("RegisterNDFFT.IA.dMax"+sDims.charAt(d)+"fr",dLimits[d]);
-					IJ.log("Axis " +sDims.charAt(d)+": "+df1.format(dLimits[d]));
-				}
-			}
+		double [] lim_fractions = null;
+		FinalInterval limInterval = null;
+		
+		if(nIterN==0)
+		{
+			IJ.log("Iteration count is equal to zero, no registration, only CC/average calculation.");
 		}
 		else
 		{
-			IJ.log("Averaging without constrains.");
+		
+			if(nConstrainReg==0)
+			{
+				IJ.log("Averaging without constrains.");
+			}
+			else
+			{
+				if(nConstrainReg == 1)
+				{
+					IJ.log("Averaging with constrain specified in voxels:");
+	
+					for(d=0;d<nDimReg;d++)
+					{
+						dLimits[d]=Math.abs(gd1.getNextNumber());
+						Prefs.set("RegisterNDFFT.IA.dMax"+sDims.charAt(d)+"px",dLimits[d]);
+						IJ.log("Axis " +sDims.charAt(d)+": "+df1.format(dLimits[d])+" pixels");
+					}
+					
+				}
+				else
+				{
+					IJ.log("Averaging with constrain specified as a fraction of max displacement:");
+					for(d=0;d<nDimReg;d++)
+					{
+						dLimits[d]=Math.min(Math.abs(gd1.getNextNumber()), 1.0);
+						Prefs.set("RegisterNDFFT.IA.dMax"+sDims.charAt(d)+"fr",dLimits[d]);
+						IJ.log("Axis " +sDims.charAt(d)+": "+df1.format(dLimits[d]));
+					}
+				}
+			}
+			
+			if(nConstrainReg == 1)
+			{
+				long[] minI = new long [nDimReg];
+				long[] maxI = new long [nDimReg];
+				for(d=0;d<nDimReg;d++)
+				{
+					maxI[d] = (long) dLimits[d];
+					minI[d] = (long) ((-1.0)*dLimits[d]);
+				}
+				limInterval = new FinalInterval(minI, maxI);
+			}
+			if(nConstrainReg == 2)
+			{
+				lim_fractions = new double [nDimReg];
+				for(d=0;d<nDimReg;d++)
+				{
+					lim_fractions[d] = dLimits[d];
+				}
+			}
 		}
+	
 		if(bExcludeZeros)
 		{
 			IJ.log("Excluding zeros: true.");
@@ -253,27 +287,7 @@ public class IterativeAveraging implements PlugIn, DialogListener {
 			IJ.log("Excluding zeros: false.");			
 		}
 		
-		double [] lim_fractions = null;
-		FinalInterval limInterval = null;
-		if(nConstrainReg == 1)
-		{
-			long[] minI = new long [nDimReg];
-			long[] maxI = new long [nDimReg];
-			for(d=0;d<nDimReg;d++)
-			{
-				maxI[d] = (long) dLimits[d];
-				minI[d] = (long) ((-1.0)*dLimits[d]);
-			}
-			limInterval = new FinalInterval(minI, maxI);
-		}
-		if(nConstrainReg == 2)
-		{
-			lim_fractions = new double [nDimReg];
-			for(d=0;d<nDimReg;d++)
-			{
-				lim_fractions[d] = dLimits[d];
-			}
-		}
+		
 		if(bIntermediateAverage && bSaveIntermediate)
 		{
 			DirectoryChooser dc = new DirectoryChooser ( "Choose a folder to save intermediate averages..." );
@@ -286,8 +300,10 @@ public class IterativeAveraging implements PlugIn, DialogListener {
 		
 		if(!imageSet.loadAllImages())
 			return;
-		IJ.log("Running for "+Integer.toString(nIterN)+" iterations.");
-		
+		if(nIterN>0)
+		{
+			IJ.log("Running for "+Integer.toString(nIterN)+" iterations.");
+		}		
 		final int nImageN = imageSet.nImageN;
 		
 		//initial shifts depending on template choice
@@ -347,8 +363,9 @@ public class IterativeAveraging implements PlugIn, DialogListener {
 		if(nIterN == 0)
 		{
 			iterBeg=-1;
-			lim_fractions = null;
 			limInterval = new FinalInterval(new long [nDimReg], new long [nDimReg]);
+			normCC.lim_fractions = null;
+			normCC.limInterval = limInterval;
 			//no need to save, since they are the same
 			bOutputInput = false;
 		}
@@ -363,6 +380,7 @@ public class IterativeAveraging implements PlugIn, DialogListener {
 			//calculate shifts and CC values
 			for(i=0;i<nImageN;i++)
 			{
+				
 				//remove current image from the average
 				currAverageImg = removeOneAverage(sumAndCount,imgs_shift.get(i));
 				//ImageJFunctions.show(currAverageImg, "aver"+Integer.toString(i+1));
@@ -371,8 +389,14 @@ public class IterativeAveraging implements PlugIn, DialogListener {
 				
 				avrgCC+=normCC.dMaxCC;
 				listCC[i]=normCC.dMaxCC;
-				IJ.showProgress(iter*(nImageN-1)+i,(nIterN)*(nImageN-1));
-				
+				if(nIterN >0)
+				{
+					IJ.showProgress(iter*(nImageN-1)+i,(nIterN)*(nImageN-1));
+				}
+				else
+				{
+					IJ.showProgress(i,nImageN);					
+				}
 				shiftsOut[i] = normCC.dShift.clone();
 				for(j=0;j<normCC.dShift.length;j++)
 				{
