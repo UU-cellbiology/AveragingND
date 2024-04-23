@@ -11,7 +11,7 @@
 
 	<groupId>nl.uu.science.cellbiology</groupId>
 	<artifactId>AveragingND</artifactId>
-	<version>0.0.4-SNAPSHOT</version>
+	<version>0.1.0-SNAPSHOT</version>
 
 	<name>AveragingND</name>
 	<description>Averaging of ND images using normalized cross-correlation. </description>

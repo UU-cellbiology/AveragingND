@@ -359,8 +359,8 @@ public class RegisterSingleND implements PlugIn, DialogListener
 		
 		//IJ.open("/home/eugene/Desktop/projects/RegisterNDFFT/4d/HyperStack.tif");
 		//IJ.open("/home/eugene/Desktop/projects/RegisterNDFFT/4d/HyperStack-1.tif");
-		IJ.open("/home/eugene/Desktop/projects/RegisterNDFFT/centered/full.tif");
-		IJ.open("/home/eugene/Desktop/projects/RegisterNDFFT/centered/center.tif");
+		IJ.open("/home/eugene/Desktop/projects/RegisterNDFFT/center/full.tif");
+		IJ.open("/home/eugene/Desktop/projects/RegisterNDFFT/center/center.tif");
 
 		
 		RegisterSingleND test = new RegisterSingleND();

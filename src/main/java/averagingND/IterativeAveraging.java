@@ -301,7 +301,7 @@ public class IterativeAveraging implements PlugIn, DialogListener {
 		sumAndCount = AverageWithoutZero.sumAndCountArray(imgs_shift);
 
 		IntervalView<FloatType> currAverageImg;
-		if(bIntermediateAverage)
+		if(bIntermediateAverage && nIterN>0)
 		{		
 			processIntermediate(0);
 		}
@@ -341,9 +341,21 @@ public class IterativeAveraging implements PlugIn, DialogListener {
 			maxAverCCshifts.add(new long[nDimReg]);
 		}
 		
+		//initial iteration
+		int iterBeg = 0;
+		//for zero iterations we want to do one without shifts
+		if(nIterN == 0)
+		{
+			iterBeg=-1;
+			lim_fractions = null;
+			limInterval = new FinalInterval(new long [nDimReg], new long [nDimReg]);
+			//no need to save, since they are the same
+			bOutputInput = false;
+		}
+		
 		long iterStartT, iterEndT;
 		
-		for(iter=0;(iter<nIterN && !bConverged);iter++)
+		for(iter=iterBeg;(iter<nIterN && !bConverged);iter++)
 		{
 			IJ.showStatus("Averaging iteration "+Integer.toString(iter+1)+"...");
 			avrgCC = 0.0;
@@ -453,15 +465,14 @@ public class IterativeAveraging implements PlugIn, DialogListener {
 		{
 			IJ.log("Best result: iteration #" + Integer.toString(nIterMax) + " with average CC " + df.format(maxAverCC));
 		
-			ptable.show("Results");
-			ptableCC.show("Average CC");
-			shifts = maxAverCCshifts;
 		}
 		else
 		{
 			IJ.log("Iteration count is equal to zero, no registration was done, just averaging.");
 		}
-		
+		ptable.show("Results");
+		ptableCC.show("Average CC");
+		shifts = maxAverCCshifts;
 		
 		//calculate final average image		
 		IJ.log("calculating final average image..");

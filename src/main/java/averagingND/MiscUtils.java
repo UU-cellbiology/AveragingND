@@ -66,6 +66,7 @@ public class MiscUtils {
 			// initialize min and max with the first image value
 			T type = cursor.next();
 			T max = type.copy();
+			maxLocation.setPosition( cursor );
 	 
 			// loop over the rest of the data and determine min and max value
 			while ( cursor.hasNext() )
