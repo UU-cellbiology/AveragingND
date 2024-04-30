@@ -41,6 +41,9 @@ public class IterativeAveraging implements PlugIn, DialogListener {
 	/** ND shift of each image **/
 	ArrayList<long []> shifts;
 	
+	/** function holding information about current template **/
+	TemplateAveraging template = null;
+	
 	/** source of images 
 	 * 0 - images currently open in ImageJ 
 	 * 1 - tif files on disk **/
@@ -77,6 +80,9 @@ public class IterativeAveraging implements PlugIn, DialogListener {
 	 * **/
 	public int nConstrainReg = 0;
 	
+	double [] lim_fractions = null;
+	FinalInterval limInterval = null;
+	
 	/** choice UI for constrain type **/
 	Choice limitCh;
 	
@@ -92,13 +98,17 @@ public class IterativeAveraging implements PlugIn, DialogListener {
 	/** format of the input dataset XYZTC **/
 	String sDims;
 	
+	/** type of averaging aim
+	 *  0 - average
+	 *  1 - median
+	 *  2 - zero masked average **/
+	int nAveragingAim;
+	
 	@Override
 	public void run(String paramString) {
 	
 		int i,j,k, iter;
 		int d;
-		
-		double [] dLimits;
 		
 		ArrayList<RandomAccessibleInterval< FloatType >> imgs_avrg_out;
 		
@@ -143,168 +153,12 @@ public class IterativeAveraging implements PlugIn, DialogListener {
 				return;
 		}
 		
-		sDims = imageSet.sRefDims;
-		
-		nDimReg = sDims.length();
-		if(imageSet.bMultiCh)
-		{
-			nDimReg--; //remove the C component
-		}
-		limName = new Label[nDimReg];
-		limVal = new TextField[nDimReg];
-		dLimits = new double [nDimReg];
-		
-		final String[] sIniTemplate = new String[ ]{"Centered","Zero (top-left)"};
-		final String[] limitsReg = new String[  ] {"No","by voxels", "by image fraction"};
-		final GenericDialog gd1 = new GenericDialog( "Averaging parameters" );
-		if(imageSet.bMultiCh)
-		{
-			final String[] channels = new String[ imageSet.nChannels];
-			for ( int c = 0; c < channels.length; ++c )
-				channels[ c ] = "use channel " + Integer.toString(c+1);
-			gd1.addChoice( "For alignment", channels, channels[ 0 ] );
-		}
-		gd1.addChoice( "Initial template:", sIniTemplate, Prefs.get("RegisterNDFFT.IA.nIniTemplate", sIniTemplate[0]) );
-		gd1.addNumericField("Number of iterations", Prefs.get("RegisterNDFFT.IA.nIterN",10),0);
-		gd1.addCheckbox("Use zero masked CC?", Prefs.get("RegisterNDFFT.IA.bExcludeZeros", false));		
-		gd1.addCheckbox("Show intermediate average?", Prefs.get("RegisterNDFFT.IA.bShowIntermediateAverage",false));
-		gd1.addCheckbox("If yes, save intermediate on disk?", Prefs.get("RegisterNDFFT.IA.bSaveIntermediate",false));
-		gd1.addCheckbox("Output registered inputs?", Prefs.get("RegisterNDFFT.IA.bOutputInput",false));
-		String sCurrChoice = Prefs.get("RegisterNDFFT.IA.sConstrain", "No");
-		gd1.addChoice("Constrain registration?", limitsReg, sCurrChoice);
-		limitCh = (Choice) gd1.getChoices().lastElement();
-		for (d=0;d<nDimReg;d++)
-		{
-			switch (sCurrChoice)
-			{
-				case "No":
-					gd1.addNumericField("No max "+sDims.charAt(d)+" limit", 0.0, 3);
-					break;
-				case "by voxels":
-					gd1.addNumericField(sDims.charAt(d)+" limit (px)", Prefs.get("RegisterNDFFT.IA.dMax"+sDims.charAt(d)+"px", 10.0), 3);
-					break;
-				case "by image fraction":
-					gd1.addNumericField(sDims.charAt(d)+" limit (0-1)", Prefs.get("RegisterNDFFT.IA.dMax"+sDims.charAt(d)+"fr", 0.5), 3);
-					break;
-					
-			}
-			limName[d] = gd1.getLabel();
-			limVal[d] = (TextField)gd1.getNumericFields().get(d+1);	
-			if(sCurrChoice.equals("No"))
-			{
-				limVal[d].setEnabled(false);
-			}
-		}
-		gd1.addDialogListener(this);
-		gd1.showDialog();
-		
-		if ( gd1.wasCanceled() )
+		if(!dialogSettings())
 			return;
-		
-		if(imageSet.bMultiCh)
-		{
-			imageSet.alignChannel = gd1.getNextChoiceIndex();
-		}
-		nIniTemplate = gd1.getNextChoiceIndex();
-		Prefs.set("RegisterNDFFT.IA.nIniTemplate", sIniTemplate[nIniTemplate]);
-		nIterN  = (int)gd1.getNextNumber();
-		Prefs.set("RegisterNDFFT.IA.nIterN", nIterN);
-		bZeroMask  = gd1.getNextBoolean();
-		Prefs.set("RegisterNDFFT.IA.bExcludeZeros", bZeroMask);
-		bIntermediateAverage = gd1.getNextBoolean();
-		Prefs.set("RegisterNDFFT.IA.bShowIntermediateAverage", bIntermediateAverage);
-		bSaveIntermediate = gd1.getNextBoolean();
-		Prefs.set("RegisterNDFFT.IA.bSaveIntermediate", bSaveIntermediate);
-		bOutputInput = gd1.getNextBoolean();
-		Prefs.set("RegisterNDFFT.IA.bOutputInput", bOutputInput);
-		nConstrainReg = gd1.getNextChoiceIndex();
-		Prefs.set("RegisterNDFFT.IA.sConstrain", limitsReg[nConstrainReg]);
-		
-		
-
-		double [] lim_fractions = null;
-		FinalInterval limInterval = null;
-		
-		if(nIterN==0)
-		{
-			IJ.log("Iteration count is equal to zero, no registration, only CC/average calculation.");
-		}
-		else
-		{
-		
-			if(nConstrainReg==0)
-			{
-				IJ.log("Averaging without constrains.");
-			}
-			else
-			{
-				if(nConstrainReg == 1)
-				{
-					IJ.log("Averaging with constrain specified in voxels:");
-	
-					for(d=0;d<nDimReg;d++)
-					{
-						dLimits[d]=Math.abs(gd1.getNextNumber());
-						Prefs.set("RegisterNDFFT.IA.dMax"+sDims.charAt(d)+"px",dLimits[d]);
-						IJ.log("Axis " +sDims.charAt(d)+": "+df1.format(dLimits[d])+" pixels");
-					}
-					
-				}
-				else
-				{
-					IJ.log("Averaging with constrain specified as a fraction of max displacement:");
-					for(d=0;d<nDimReg;d++)
-					{
-						dLimits[d]=Math.min(Math.abs(gd1.getNextNumber()), 1.0);
-						Prefs.set("RegisterNDFFT.IA.dMax"+sDims.charAt(d)+"fr",dLimits[d]);
-						IJ.log("Axis " +sDims.charAt(d)+": "+df1.format(dLimits[d]));
-					}
-				}
-			}
-			
-			if(nConstrainReg == 1)
-			{
-				long[] minI = new long [nDimReg];
-				long[] maxI = new long [nDimReg];
-				for(d=0;d<nDimReg;d++)
-				{
-					maxI[d] = (long) dLimits[d];
-					minI[d] = (long) ((-1.0)*dLimits[d]);
-				}
-				limInterval = new FinalInterval(minI, maxI);
-			}
-			if(nConstrainReg == 2)
-			{
-				lim_fractions = new double [nDimReg];
-				for(d=0;d<nDimReg;d++)
-				{
-					lim_fractions[d] = dLimits[d];
-				}
-			}
-		}
-	
-		if(bZeroMask)
-		{
-			IJ.log("Using zero masked cross-correlation.");
-		}
-		else
-		{
-			IJ.log("Using non-masked cross-correlation.");			
-		}
-		
-		
-		if(bIntermediateAverage && bSaveIntermediate && nIterN>0)
-		{
-			DirectoryChooser dc = new DirectoryChooser ( "Choose a folder to save intermediate averages..." );
-			sPathIntermediate = dc.getDirectory();
-			if(sPathIntermediate == null)
-				return;
-			
-		}
-		
 		
 		if(!imageSet.loadAllImages())
 			return;
+		
 		if(nIterN>0)
 		{
 			IJ.log("Running for "+Integer.toString(nIterN)+" iterations.");
@@ -317,9 +171,11 @@ public class IterativeAveraging implements PlugIn, DialogListener {
 		//create a new shifted array of images
 		buildShiftedIntervals(imageSet.imgs, imgs_shift,shifts);
 		
+		
+		template = new TemplateAveraging(nAveragingAim);
 
-		ArrayList<IntervalView<FloatType>> sumAndCount = null;
-		sumAndCount = AverageWithoutZero.sumAndCountArray(imgs_shift);
+		//ArrayList<IntervalView<FloatType>> sumAndCount = null;
+		//sumAndCount = AverageWithoutZero.sumAndCountArray(imgs_shift);
 
 		IntervalView<FloatType> currAverageImg;
 		if(bIntermediateAverage && nIterN>0)
@@ -382,12 +238,15 @@ public class IterativeAveraging implements PlugIn, DialogListener {
 			IJ.showStatus("Averaging iteration "+Integer.toString(iter+1)+"...");
 			avrgCC = 0.0;
 			iterStartT = System.currentTimeMillis();
+			//new average (sum and count)
+			template.init(imgs_shift);
 			//calculate shifts and CC values
 			for(i=0;i<nImageN;i++)
 			{
 				
 				//remove current image from the average
-				currAverageImg = removeOneAverage(sumAndCount,imgs_shift.get(i));
+				currAverageImg = template.getTemplateForImage(imgs_shift.get(i));
+				//currAverageImg = removeOneAverage(sumAndCount,imgs_shift.get(i));
 				//ImageJFunctions.show(currAverageImg, "aver"+Integer.toString(i+1));
 				//removeOneAverage
 				normCC.caclulateGenNormCC(Views.zeroMin(currAverageImg), imageSet.imgs.get(i), false);
@@ -446,8 +305,8 @@ public class IterativeAveraging implements PlugIn, DialogListener {
 
 			// calculate new img array with applied displacements			
 			cumShift = buildShiftedIntervals(imageSet.imgs, imgs_shift,shifts);
-			//new average (sum and count)
-			sumAndCount = AverageWithoutZero.sumAndCountArray(imgs_shift);
+
+			//sumAndCount = AverageWithoutZero.sumAndCountArray(imgs_shift);
 			
 			
 			ptableCC.incrementCounter();
@@ -632,6 +491,7 @@ public class IterativeAveraging implements PlugIn, DialogListener {
 		}
 		return cumShift;
 	}
+	
 	/** function generates shifts so all images are centered (+/- one pixel) if nMethod ==0 
 	 * and just zero values if nMethod == 1 **/
 	public ArrayList<long []> initShifts(final ArrayList<RandomAccessibleInterval< FloatType >> imgs_in, int nMethod)
@@ -705,6 +565,194 @@ public class IterativeAveraging implements PlugIn, DialogListener {
 			temp.show();
 		}	
 	}
+	
+	public boolean dialogSettings()
+	{
+		int d;
+		
+		//double format formatting tool
+		final DecimalFormatSymbols symbols = new DecimalFormatSymbols();
+		symbols.setDecimalSeparator('.');
+		final DecimalFormat df1 = new DecimalFormat ("#.#", symbols);
+		
+		sDims = imageSet.sRefDims;
+		
+		nDimReg = sDims.length();
+		if(imageSet.bMultiCh)
+		{
+			nDimReg--; //remove the C component
+		}
+		
+		
+		limName = new Label[nDimReg];
+		limVal = new TextField[nDimReg];
+		double [] dLimits = new double [nDimReg];
+		
+		final String[] sIniTemplate = new String[ ]{"Centered","Zero (top-left)"};
+		final String[] sAveragingAim = new String[ ]{"Average","Median","Zero masked average"};
+		final String[] limitsReg = new String[  ] {"No","by voxels", "by image fraction"};
+		final GenericDialog gd1 = new GenericDialog( "Averaging parameters" );
+		if(imageSet.bMultiCh)
+		{
+			final String[] channels = new String[ imageSet.nChannels];
+			for ( int c = 0; c < channels.length; ++c )
+				channels[ c ] = "use channel " + Integer.toString(c+1);
+			gd1.addChoice( "For alignment", channels, channels[ 0 ] );
+		}
+		gd1.addChoice( "Initial template:", sIniTemplate, Prefs.get("RegisterNDFFT.IA.nIniTemplate", sIniTemplate[0]) );
+		gd1.addNumericField("Number of iterations", Prefs.get("RegisterNDFFT.IA.nIterN",10),0);
+		gd1.addChoice( "Template calculation:", sAveragingAim, Prefs.get("RegisterNDFFT.IA.nAveragingAim", sAveragingAim[0]) );
+		gd1.addCheckbox("Use zero masked CC?", Prefs.get("RegisterNDFFT.IA.bExcludeZeros", false));		
+		String sCurrChoice = Prefs.get("RegisterNDFFT.IA.sConstrain", "No");
+		gd1.addChoice("Constrain registration?", limitsReg, sCurrChoice);
+		limitCh = (Choice) gd1.getChoices().lastElement();
+		for (d=0;d<nDimReg;d++)
+		{
+			switch (sCurrChoice)
+			{
+				case "No":
+					gd1.addNumericField("No max "+sDims.charAt(d)+" limit", 0.0, 3);
+					break;
+				case "by voxels":
+					gd1.addNumericField(sDims.charAt(d)+" limit (px)", Prefs.get("RegisterNDFFT.IA.dMax"+sDims.charAt(d)+"px", 10.0), 3);
+					break;
+				case "by image fraction":
+					gd1.addNumericField(sDims.charAt(d)+" limit (0-1)", Prefs.get("RegisterNDFFT.IA.dMax"+sDims.charAt(d)+"fr", 0.5), 3);
+					break;
+					
+			}
+			limName[d] = gd1.getLabel();
+			limVal[d] = (TextField)gd1.getNumericFields().get(d+1);	
+			if(sCurrChoice.equals("No"))
+			{
+				limVal[d].setEnabled(false);
+			}
+		}
+		gd1.addMessage("Output:");
+		gd1.addCheckbox("Show intermediate average?", Prefs.get("RegisterNDFFT.IA.bShowIntermediateAverage",false));
+		gd1.addCheckbox("If yes, save intermediate on disk?", Prefs.get("RegisterNDFFT.IA.bSaveIntermediate",false));
+		gd1.addCheckbox("Output registered inputs?", Prefs.get("RegisterNDFFT.IA.bOutputInput",false));
+
+		gd1.addDialogListener(this);
+		gd1.showDialog();
+		
+		if ( gd1.wasCanceled() )
+			return false;
+		
+		if(imageSet.bMultiCh)
+		{
+			imageSet.alignChannel = gd1.getNextChoiceIndex();
+		}
+		
+		nIniTemplate = gd1.getNextChoiceIndex();
+		Prefs.set("RegisterNDFFT.IA.nIniTemplate", sIniTemplate[nIniTemplate]);
+		
+		nIterN  = (int)gd1.getNextNumber();
+		Prefs.set("RegisterNDFFT.IA.nIterN", nIterN);
+		
+		nAveragingAim = gd1.getNextChoiceIndex();
+		Prefs.set("RegisterNDFFT.IA.nAveragingAim", sAveragingAim[nAveragingAim]);
+		
+		bZeroMask  = gd1.getNextBoolean();
+		Prefs.set("RegisterNDFFT.IA.bExcludeZeros", bZeroMask);
+		
+		nConstrainReg = gd1.getNextChoiceIndex();
+		Prefs.set("RegisterNDFFT.IA.sConstrain", limitsReg[nConstrainReg]);
+		
+		IJ.log("Initial template: "+ sIniTemplate[nIniTemplate]);
+		
+		IJ.log("Template calculation: "+ sAveragingAim[nAveragingAim]);
+		
+		if(bZeroMask)
+		{
+			IJ.log("Using zero masked cross-correlation.");
+		}
+		else
+		{
+			IJ.log("Using non-masked cross-correlation.");			
+		}
+		
+		
+		if(nIterN==0)
+		{
+			IJ.log("Iteration count is equal to zero, no registration, only CC/average calculation.");
+		}
+		else
+		{
+		
+			if(nConstrainReg == 0)
+			{
+				IJ.log("Averaging without constrains.");
+			}
+			else
+			{
+				if(nConstrainReg == 1)
+				{
+					IJ.log("Averaging with constrain specified in voxels:");
+	
+					for(d=0;d<nDimReg;d++)
+					{
+						dLimits[d]=Math.abs(gd1.getNextNumber());
+						Prefs.set("RegisterNDFFT.IA.dMax"+sDims.charAt(d)+"px",dLimits[d]);
+						IJ.log("Axis " +sDims.charAt(d)+": "+df1.format(dLimits[d])+" pixels");
+					}
+					
+				}
+				else
+				{
+					IJ.log("Averaging with constrain specified as a fraction of max displacement:");
+					for(d=0;d<nDimReg;d++)
+					{
+						dLimits[d]=Math.min(Math.abs(gd1.getNextNumber()), 1.0);
+						Prefs.set("RegisterNDFFT.IA.dMax"+sDims.charAt(d)+"fr",dLimits[d]);
+						IJ.log("Axis " +sDims.charAt(d)+": "+df1.format(dLimits[d]));
+					}
+				}
+			}
+			
+			if(nConstrainReg == 1)
+			{
+				long[] minI = new long [nDimReg];
+				long[] maxI = new long [nDimReg];
+				for(d=0;d<nDimReg;d++)
+				{
+					maxI[d] = (long) dLimits[d];
+					minI[d] = (long) ((-1.0)*dLimits[d]);
+				}
+				limInterval = new FinalInterval(minI, maxI);
+			}
+			if(nConstrainReg == 2)
+			{
+				lim_fractions = new double [nDimReg];
+				for(d=0;d<nDimReg;d++)
+				{
+					lim_fractions[d] = dLimits[d];
+				}
+			}
+		}
+		
+		bIntermediateAverage = gd1.getNextBoolean();
+		Prefs.set("RegisterNDFFT.IA.bShowIntermediateAverage", bIntermediateAverage);
+		bSaveIntermediate = gd1.getNextBoolean();
+		Prefs.set("RegisterNDFFT.IA.bSaveIntermediate", bSaveIntermediate);
+		bOutputInput = gd1.getNextBoolean();
+		Prefs.set("RegisterNDFFT.IA.bOutputInput", bOutputInput);
+
+		
+		
+		if(bIntermediateAverage && bSaveIntermediate && nIterN>0)
+		{
+			DirectoryChooser dc = new DirectoryChooser ( "Choose a folder to save intermediate averages..." );
+			sPathIntermediate = dc.getDirectory();
+			if(sPathIntermediate == null)
+				return false;
+			
+		}
+		return true;
+
+	}
+	
+	
 	@Override
 	public boolean dialogItemChanged(GenericDialog gd, AWTEvent e) {
 		int d;
