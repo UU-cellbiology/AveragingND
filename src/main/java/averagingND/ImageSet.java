@@ -218,6 +218,7 @@ public class ImageSet {
 				}
 			}
 		}
+		IJ.log("Dimension ranges of the input images:");
 		for(int d=0;d<nDim;d++)
 		{
 			IJ.log("Axis "+sRefDimsIJ.charAt(d)+" min: "+Long.toString(dimsMin[d])+" max: "+Long.toString(dimsMax[d]));

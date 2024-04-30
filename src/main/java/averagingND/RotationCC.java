@@ -113,7 +113,7 @@ public class RotationCC {
 		ImageJFunctions.show(transIm).setTitle("imgFFTPolar");	    
 	    ImageJFunctions.show(transTem).setTitle("tempFFTPolar");
 	    GenNormCC normCC = new GenNormCC();
-	    normCC.bExcludeZeros=true;
+	    normCC.bZeroMask=true;
 	    double [] dLims = new double[nDim];
 	    for(int d=0;d<nDim;d++)
 	    {

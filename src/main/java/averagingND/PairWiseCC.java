@@ -10,7 +10,7 @@ import java.text.DecimalFormat;
 import java.text.DecimalFormatSymbols;
 
 import ij.IJ;
-
+import ij.ImageJ;
 import ij.Prefs;
 import ij.gui.DialogListener;
 import ij.gui.GenericDialog;
@@ -24,16 +24,25 @@ public class PairWiseCC implements PlugIn, DialogListener {
 
 	public int nInput = 0; 
 
-	boolean bExcludeZeros = false;
+	boolean bZeroMask = false;
 		
 	/** set of images for averaging and information about them **/
 	ImageSet imageSet;
 	
 	public int nConstrainReg = 0;
+	
+	/** choice UI for constrain type **/
+	Choice limitCh;
+
+	/** labels of constrain axes **/
 	Label [] limName;
+	
+	/** values of constrain axes **/
 	TextField [] limVal;
+	
 	int nDimReg;
 	String sDims;
+	boolean bCenteredLimit = true;
 	
 	@Override
 	public void run(String arg) {
@@ -41,6 +50,12 @@ public class PairWiseCC implements PlugIn, DialogListener {
 		
 		int i,j,k;
 		int d;
+		
+		//double format formatting tool
+		DecimalFormatSymbols symbols = new DecimalFormatSymbols();
+		symbols.setDecimalSeparator('.');
+		//DecimalFormat df = new DecimalFormat ("#.########", symbols);
+		DecimalFormat df1 = new DecimalFormat ("#.#", symbols);
 		
 		double [] dLimits;
 		final String[] sInput = new String[2];
@@ -54,6 +69,8 @@ public class PairWiseCC implements PlugIn, DialogListener {
 		
 		if ( gdFiles.wasCanceled() )
 			return;		
+		IJ.log("Iterative ND averaging plugin, version " + ConstantsAveragingND.sVersion);
+		IJ.log("Pairwise CC (cross-correlation) command.");
 		
 		nInput = gdFiles.getNextChoiceIndex();
 		Prefs.set("RegisterNDFFT.PW.nInput", sInput[nInput]);
@@ -96,9 +113,10 @@ public class PairWiseCC implements PlugIn, DialogListener {
 			gd1.addChoice( "For calculations ", channels, channels[ 0 ] );
 		}
 		
-		gd1.addCheckbox("Exclude zero values?", Prefs.get("RegisterNDFFT.PW.bExcludeZeros", false));	
+		gd1.addCheckbox("Use zero masked CC?", Prefs.get("RegisterNDFFT.PW.bExcludeZeros", false));	
 		String sCurrChoice = Prefs.get("RegisterNDFFT.PW.sConstrain", "No");
 		gd1.addChoice("Constrain registration?", limitsReg, sCurrChoice);
+		limitCh = (Choice) gd1.getChoices().lastElement();
 		for (d=0;d<nDimReg;d++)
 		{
 			switch (sCurrChoice)
@@ -121,6 +139,9 @@ public class PairWiseCC implements PlugIn, DialogListener {
 				limVal[d].setEnabled(false);
 			}
 		}
+		
+		gd1.addCheckbox("Image centered constrains?", Prefs.get("RegisterNDFFT.PW.bCenteredLimit", false));
+
 		gd1.addDialogListener(this);
 		gd1.showDialog();
 		
@@ -133,32 +154,54 @@ public class PairWiseCC implements PlugIn, DialogListener {
 			imageSet.alignChannel = gd1.getNextChoiceIndex();
 		}
 
-		bExcludeZeros  = gd1.getNextBoolean();
-		Prefs.set("RegisterNDFFT.PW.bExcludeZeros", bExcludeZeros);
+		bZeroMask  = gd1.getNextBoolean();
+		Prefs.set("RegisterNDFFT.PW.bExcludeZeros", bZeroMask);
 		
 		nConstrainReg = gd1.getNextChoiceIndex();
 		Prefs.set("RegisterNDFFT.PW.sConstrain", limitsReg[nConstrainReg]);
+
 		
-		if(nConstrainReg!=0)
+		bCenteredLimit  = gd1.getNextBoolean();
+		Prefs.set("RegisterNDFFT.PW.bCenteredLimit", bCenteredLimit);
+
+		if(nConstrainReg==0)
+		{
+			IJ.log("Pairwise CC without constrains.");
+		}
+		else		
 		{
 			if(nConstrainReg == 1)
 			{
+				IJ.log("Pairwice CC with constrain specified in voxels:");
+				
 				for(d=0;d<nDimReg;d++)
 				{
 					dLimits[d]=Math.abs(gd1.getNextNumber());
 					Prefs.set("RegisterNDFFT.PW.dMax"+sDims.charAt(d)+"px",dLimits[d]);
+					IJ.log("Axis " +sDims.charAt(d)+": "+df1.format(dLimits[d])+" pixels");
 				}
 				
 			}
 			else
 			{
+				IJ.log("Averaging with constrain specified as a fraction of max displacement:");
 				for(d=0;d<nDimReg;d++)
 				{
 					dLimits[d]=Math.min(Math.abs(gd1.getNextNumber()), 1.0);
 					Prefs.set("RegisterNDFFT.PW.dMax"+sDims.charAt(d)+"fr",dLimits[d]);
+					IJ.log("Axis " +sDims.charAt(d)+": "+df1.format(dLimits[d]));
 				}
 			}
+			if(bCenteredLimit)
+			{
+				IJ.log("Constrains applied with respect to centered position.");
+			}
+			else
+			{
+				IJ.log("Constrains applied with respect to the coordinates origin (Zero, top-left).");
+			}
 		}
+		
 		double [] lim_fractions = null;
 		FinalInterval limInterval = null;
 		if(nConstrainReg == 1)
@@ -188,9 +231,10 @@ public class PairWiseCC implements PlugIn, DialogListener {
 		
 		GenNormCC normCC = new GenNormCC();
 		normCC.bVerbose = false;
-		normCC.bExcludeZeros=bExcludeZeros;
+		normCC.bZeroMask = bZeroMask;
 		normCC.lim_fractions = lim_fractions;
 		normCC.limInterval = limInterval;
+		normCC.bCenteredLimit = bCenteredLimit;
 		
 		ResultsTable ptable = ResultsTable.getResultsTable();
 		ptable.reset();
@@ -239,13 +283,10 @@ public class PairWiseCC implements PlugIn, DialogListener {
 			DecimalFormatSymbols symbols = new DecimalFormatSymbols();
 			symbols.setDecimalSeparator('.');
 			DecimalFormat df1 = new DecimalFormat ("#.##", symbols);
-			int nCh = 0;
-			if(imageSet.bMultiCh)
-				nCh = 1;
-			Choice limit = (Choice) gd.getChoices().get(nCh);
-			if(e.getSource()==limit)
+
+			if(e.getSource()==limitCh)
 			{
-				switch (limit.getSelectedIndex())
+				switch (limitCh.getSelectedIndex())
 				{
 					case 0:
 						for(d=0;d<nDimReg;d++)
@@ -276,6 +317,18 @@ public class PairWiseCC implements PlugIn, DialogListener {
 		}
 		return true;
 	}
+	
+	public static void main( final String[] args )
+	{
+		// open an ImageJ window
+		 new ImageJ();
+		//IJ.open("/home/eugene/Desktop/projects/RegisterNDFFT/single/MAX_089-1.tif");
+		//IJ.open("/home/eugene/Desktop/projects/RegisterNDFFT/single/MAX_098-1.tif");
+		 PairWiseCC pw = new PairWiseCC();
+		 pw.run(null);
+
+	}
+
 	
 
 }

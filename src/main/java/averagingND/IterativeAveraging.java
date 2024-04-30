@@ -62,7 +62,8 @@ public class IterativeAveraging implements PlugIn, DialogListener {
 	
 	String sPathIntermediate = "";
 
-	public boolean bExcludeZeros = false;
+	/** whether to use zero masked CC **/
+	public boolean bZeroMask = false;
 	
 	public boolean bOutputInput = false;
 	
@@ -75,6 +76,9 @@ public class IterativeAveraging implements PlugIn, DialogListener {
 	 * 2 - constrains as a fraction of max displacement 
 	 * **/
 	public int nConstrainReg = 0;
+	
+	/** choice UI for constrain type **/
+	Choice limitCh;
 	
 	/** labels of constrain axes **/
 	Label [] limName;
@@ -98,7 +102,7 @@ public class IterativeAveraging implements PlugIn, DialogListener {
 		
 		ArrayList<RandomAccessibleInterval< FloatType >> imgs_avrg_out;
 		
-		//double format formatting toold
+		//double format formatting tool
 		DecimalFormatSymbols symbols = new DecimalFormatSymbols();
 		symbols.setDecimalSeparator('.');
 		DecimalFormat df = new DecimalFormat ("#.########", symbols);
@@ -150,7 +154,7 @@ public class IterativeAveraging implements PlugIn, DialogListener {
 		limVal = new TextField[nDimReg];
 		dLimits = new double [nDimReg];
 		
-		final String[] sIniTemplate = new String[ ]{"Average (center)","Average (top-left)"};
+		final String[] sIniTemplate = new String[ ]{"Centered","Zero (top-left)"};
 		final String[] limitsReg = new String[  ] {"No","by voxels", "by image fraction"};
 		final GenericDialog gd1 = new GenericDialog( "Averaging parameters" );
 		if(imageSet.bMultiCh)
@@ -162,12 +166,13 @@ public class IterativeAveraging implements PlugIn, DialogListener {
 		}
 		gd1.addChoice( "Initial template:", sIniTemplate, Prefs.get("RegisterNDFFT.IA.nIniTemplate", sIniTemplate[0]) );
 		gd1.addNumericField("Number of iterations", Prefs.get("RegisterNDFFT.IA.nIterN",10),0);
-		gd1.addCheckbox("Exclude zero values?", Prefs.get("RegisterNDFFT.IA.bExcludeZeros", false));		
+		gd1.addCheckbox("Use zero masked CC?", Prefs.get("RegisterNDFFT.IA.bExcludeZeros", false));		
 		gd1.addCheckbox("Show intermediate average?", Prefs.get("RegisterNDFFT.IA.bShowIntermediateAverage",false));
 		gd1.addCheckbox("If yes, save intermediate on disk?", Prefs.get("RegisterNDFFT.IA.bSaveIntermediate",false));
 		gd1.addCheckbox("Output registered inputs?", Prefs.get("RegisterNDFFT.IA.bOutputInput",false));
 		String sCurrChoice = Prefs.get("RegisterNDFFT.IA.sConstrain", "No");
 		gd1.addChoice("Constrain registration?", limitsReg, sCurrChoice);
+		limitCh = (Choice) gd1.getChoices().lastElement();
 		for (d=0;d<nDimReg;d++)
 		{
 			switch (sCurrChoice)
@@ -204,8 +209,8 @@ public class IterativeAveraging implements PlugIn, DialogListener {
 		Prefs.set("RegisterNDFFT.IA.nIniTemplate", sIniTemplate[nIniTemplate]);
 		nIterN  = (int)gd1.getNextNumber();
 		Prefs.set("RegisterNDFFT.IA.nIterN", nIterN);
-		bExcludeZeros  = gd1.getNextBoolean();
-		Prefs.set("RegisterNDFFT.IA.bExcludeZeros", bExcludeZeros);
+		bZeroMask  = gd1.getNextBoolean();
+		Prefs.set("RegisterNDFFT.IA.bExcludeZeros", bZeroMask);
 		bIntermediateAverage = gd1.getNextBoolean();
 		Prefs.set("RegisterNDFFT.IA.bShowIntermediateAverage", bIntermediateAverage);
 		bSaveIntermediate = gd1.getNextBoolean();
@@ -278,13 +283,13 @@ public class IterativeAveraging implements PlugIn, DialogListener {
 			}
 		}
 	
-		if(bExcludeZeros)
+		if(bZeroMask)
 		{
-			IJ.log("Excluding zeros: true.");
+			IJ.log("Using zero masked cross-correlation.");
 		}
 		else
 		{
-			IJ.log("Excluding zeros: false.");			
+			IJ.log("Using non-masked cross-correlation.");			
 		}
 		
 		
@@ -324,7 +329,7 @@ public class IterativeAveraging implements PlugIn, DialogListener {
 		
 		GenNormCC normCC = new GenNormCC();
 		normCC.bVerbose = false;
-		normCC.bExcludeZeros = bExcludeZeros;
+		normCC.bZeroMask = bZeroMask;
 		normCC.lim_fractions = lim_fractions;
 		normCC.limInterval = limInterval;
 		normCC.bCenteredLimit = true;
@@ -660,12 +665,12 @@ public class IterativeAveraging implements PlugIn, DialogListener {
 	
 	public void medianCorrectShifts(final long [][] shifts_in)
 	{
-		int i,j;
-		int d = shifts_in[0].length;
-		int imN = shifts_in.length;
-		long [] dimX = new long[imN];
+		int j;
+		final int d = shifts_in[0].length;
+		final int imN = shifts_in.length;
+		final long [] dimX = new long[imN];
 		long median;
-		for(i=0;i<d;i++)
+		for(int i=0;i<d;i++)
 		{
 			for(j=0;j<imN;j++)
 			{
@@ -709,13 +714,10 @@ public class IterativeAveraging implements PlugIn, DialogListener {
 			DecimalFormatSymbols symbols = new DecimalFormatSymbols();
 			symbols.setDecimalSeparator('.');
 			DecimalFormat df1 = new DecimalFormat ("#.##", symbols);
-			int nCh = 1;
-			if(imageSet.bMultiCh)
-				nCh = 2;
-			Choice limit = (Choice) gd.getChoices().get(nCh);
-			if(e.getSource()==limit)
+			
+			if(e.getSource()==limitCh)
 			{
-				switch (limit.getSelectedIndex())
+				switch (limitCh.getSelectedIndex())
 				{
 					case 0:
 						for(d=0;d<nDimReg;d++)

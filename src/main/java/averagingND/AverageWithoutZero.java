@@ -12,7 +12,6 @@ import net.imglib2.RandomAccessibleInterval;
 import net.imglib2.img.ImagePlusAdapter;
 import net.imglib2.img.Img;
 import net.imglib2.img.array.ArrayImgs;
-import net.imglib2.img.display.imagej.ImageJFunctions;
 import net.imglib2.type.numeric.real.FloatType;
 import net.imglib2.util.Intervals;
 import net.imglib2.view.IntervalView;
@@ -20,7 +19,7 @@ import net.imglib2.view.Views;
 
 public class AverageWithoutZero implements PlugIn {
 
-	public boolean multiCh=false;
+	public boolean multiCh = false;
 	@Override
 	public void run(String arg0) {
 

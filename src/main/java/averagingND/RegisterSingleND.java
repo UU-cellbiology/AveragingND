@@ -46,10 +46,18 @@ public class RegisterSingleND implements PlugIn, DialogListener
 	public int regChannel1 = 0;
 	public int regChannel2 = 0;
 	public boolean multiCh = false;
-	public boolean bExcludeZeros = false;
+	public boolean bZeroMask = false;
 	public int nConstrainReg = 0;
+	
+	/** choice UI for constrain type **/
+	Choice limitCh;
+	
+	/** labels of constrain axes **/
 	Label [] limName;
+	
+	/** values of constrain axes **/
 	TextField [] limVal;
+	
 	int nDimReg;
 	String sDims;
 	boolean bCenteredLimit = false;
@@ -144,12 +152,12 @@ public class RegisterSingleND implements PlugIn, DialogListener
 		
 		final String[] limitsReg = new String[  ] {"No","by voxels", "by image fraction"};
 		final GenericDialog gd1 = new GenericDialog( "Registration parameters" );	
-		gd1.addCheckbox("Exclude zero values?", Prefs.get("RegisterNDFFT.bExcludeZeros", false));		
+		gd1.addCheckbox("Use zero masked CC?", Prefs.get("RegisterNDFFT.bExcludeZeros", false));		
 		gd1.addCheckbox("Show cross-correlation?", Prefs.get("RegisterNDFFT.bShowCC", false));
 		gd1.addCheckbox("Register template?", Prefs.get("RegisterNDFFT.bRegisterTemplate", false));
 		String sCurrChoice = Prefs.get("RegisterNDFFT.sConstrain", "No");
 		gd1.addChoice("Constrain registration?", limitsReg, sCurrChoice);
-	
+		limitCh = (Choice) gd1.getChoices().lastElement();
 		
 		for (d=0;d<nDimReg;d++)
 		{
@@ -181,8 +189,8 @@ public class RegisterSingleND implements PlugIn, DialogListener
 		if ( gd1.wasCanceled() )
 			return;
 		
-		bExcludeZeros  = gd1.getNextBoolean();
-		Prefs.set("RegisterNDFFT.bExcludeZeros", bExcludeZeros);
+		bZeroMask  = gd1.getNextBoolean();
+		Prefs.set("RegisterNDFFT.bExcludeZeros", bZeroMask);
 		bShowCC  = gd1.getNextBoolean();
 		Prefs.set("RegisterNDFFT.bShowCC", bShowCC);
 		bRegisterTemplate  = gd1.getNextBoolean();
@@ -238,13 +246,13 @@ public class RegisterSingleND implements PlugIn, DialogListener
 		final Img< FloatType > image_in = ImagePlusAdapter.convertFloat(imp1);
 		final Img< FloatType > template_in = ImagePlusAdapter.convertFloat(imp2);
 		GenNormCC normCC = new GenNormCC();
-		normCC.bExcludeZeros = bExcludeZeros;
+		normCC.bZeroMask = bZeroMask;
 		
 		normCC.lim_fractions = lim_fractions;
 		normCC.limInterval = limInterval;
 		normCC.bCenteredLimit = bCenteredLimit;
 		
-		boolean bNormCCcalc=false;
+		boolean bNormCCcalc = false;
 		
 		if(multiCh)
 		{			
@@ -314,10 +322,10 @@ public class RegisterSingleND implements PlugIn, DialogListener
 			DecimalFormatSymbols symbols = new DecimalFormatSymbols();
 			symbols.setDecimalSeparator('.');
 			DecimalFormat df1 = new DecimalFormat ("#.##", symbols);
-			Choice limit = (Choice) gd.getChoices().get(0);
-			if(e.getSource()==limit)
+			
+			if(e.getSource()==limitCh)
 			{
-				switch (limit.getSelectedIndex())
+				switch (limitCh.getSelectedIndex())
 				{
 					case 0:
 						for(d=0;d<nDimReg;d++)

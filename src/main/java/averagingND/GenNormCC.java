@@ -38,7 +38,7 @@ public class GenNormCC {
 	public boolean bVerbose = true;
 	
 	/** whether to exclude/ignore voxels that are zeros **/	
-	public boolean bExcludeZeros = false;
+	public boolean bZeroMask = false;
 	
 	/** window limit of CC max localization as a fraction of max displacement **/
 	public double [] lim_fractions = null;
@@ -64,7 +64,7 @@ public class GenNormCC {
 				
 		if(image.numDimensions()!=template.numDimensions())
 		{
-			IJ.log("Error! Different dimensions of input and template!");
+			IJ.log("Error! Different number of dimensions between reference and template images!");
 			return false;
 		}
 		
@@ -103,11 +103,9 @@ public class GenNormCC {
 		}
 		
 		
-		long[] paddedDimensions = new long[template.numDimensions()];
-		long[] fftSize = new long[template.numDimensions()];
+		long[] paddedDimensions = new long[nDim];
+		long[] fftSize = new long[nDim];
 		FFTMethods.dimensionsRealToComplexFast(new FinalDimensions(finDim), paddedDimensions, fftSize);
-		
-		//System.out.println("done");
 		
 		//padded intervals
 		FinalInterval imgIntPad = (FinalInterval) FFTMethods.paddingIntervalCentered(image, new FinalDimensions(paddedDimensions));
@@ -123,7 +121,7 @@ public class GenNormCC {
 		final ArrayImg<FloatType, FloatArray> unityImg = ArrayImgs.floats(imgDim);
 		final ArrayImg<FloatType, FloatArray> unityTem = ArrayImgs.floats(temDim);
 
-		if(!bExcludeZeros)
+		if(!bZeroMask)
 		{
 			unityImg.forEach(t->t.set(1.0f));
 			unityTem.forEach(t->t.set(1.0f));
@@ -303,10 +301,6 @@ public class GenNormCC {
 		{
 			constrainFr = new FinalInterval(cropFraction[0] ,  cropFraction[1]);
 		}		
-//		if(limInterval != null)
-//		{
-//			intervalCrop  = Intervals.intersect(intervalCrop, limInterval);
-//		}
 
 		//Now we need to account for the padding. Since it is changing the origin
 		//of coordinates of template with respect to the original image
@@ -323,8 +317,6 @@ public class GenNormCC {
 		IntervalView< FloatType > ivCCswapped;
 		//full available shift space
 		ivCCswapped =  Views.interval(Views.translate(Views.extendPeriodic( invF1F2 ), nCCOrigin),intervalFull);
-		
-		
 		
 		//let's apply constrains
 			
@@ -359,17 +351,6 @@ public class GenNormCC {
 		}
 		
 		
-//		if(bCenteredLimit)
-//		{
-//			ivCCswapped =  Views.interval(Views.extendPeriodic( invF1F2 ),intervalCrop);
-//		}
-//		else
-//		{
-//			//ivCCswapped =  Views.interval(Views.extendPeriodic( invF1F2 ),intervalCrop);
-//			ivCCswapped =  Views.interval(Views.translate(Views.extendPeriodic( invF1F2 ), nCCOrigin),intervalCrop);
-//			//ivCCswapped =  Views.interval(Views.translate(Views.extendPeriodic( invF1F2 ), nCCOrigin),intervalCrop);
-//		}
-		
 		if(bShowCC)
 		{
 			ImageJFunctions.show(ivCCswapped).setTitle( "General cross-correlation" );
@@ -397,14 +378,7 @@ public class GenNormCC {
 		
 		// final shift of images 
 		shift.localize(dShift);
-//		if(bCenteredLimit)
-//		{
-//			//add center position
-//			for(i=0;i<nDim;i++)
-//			{
-//				dShift[i] += nCCOrigin[i];
-//			}
-//		}
+
 		// max of cross-correlation
 		dMaxCC = fCCvalue.get();
 
@@ -456,7 +430,7 @@ public class GenNormCC {
 			//if(Math.abs(t4)>Float.MIN_VALUE)
 			{
 
-				temp=cursFl1.get().get()-(cursFl2.get().get()*cursFl3.get().get()/cursFl4.get().get());
+				temp = cursFl1.get().get()-(cursFl2.get().get()*cursFl3.get().get()/cursFl4.get().get());
 				cursFl1.get().set(Math.max(temp, 0));
 
 			}
