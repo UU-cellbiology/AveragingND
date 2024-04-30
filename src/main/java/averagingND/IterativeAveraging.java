@@ -5,6 +5,7 @@ import java.awt.AWTEvent;
 import java.awt.Choice;
 import java.awt.Label;
 import java.awt.TextField;
+import java.io.File;
 import java.text.DecimalFormat;
 import java.text.DecimalFormatSymbols;
 import java.util.ArrayList;
@@ -59,9 +60,9 @@ public class IterativeAveraging implements PlugIn, DialogListener {
 	public int nIterN = 0;
 
 	/** whether or not generate intermediate average **/
-	boolean bIntermediateAverage = false;
-	
 	boolean bSaveIntermediate = false;
+	
+	String sPathGeneralOutput = "";
 	
 	String sPathIntermediate = "";
 
@@ -69,6 +70,8 @@ public class IterativeAveraging implements PlugIn, DialogListener {
 	public boolean bZeroMask = false;
 	
 	public boolean bOutputInput = false;
+	
+	String sPathRegistered = "";
 	
 	/** for now it cannot be changed by user **/
 	public boolean bIgnoreZeroInAveraging = true;
@@ -81,6 +84,7 @@ public class IterativeAveraging implements PlugIn, DialogListener {
 	public int nConstrainReg = 0;
 	
 	double [] lim_fractions = null;
+	
 	FinalInterval limInterval = null;
 	
 	/** choice UI for constrain type **/
@@ -178,7 +182,7 @@ public class IterativeAveraging implements PlugIn, DialogListener {
 		//sumAndCount = AverageWithoutZero.sumAndCountArray(imgs_shift);
 
 		IntervalView<FloatType> currAverageImg;
-		if(bIntermediateAverage && nIterN>0)
+		if(bSaveIntermediate && nIterN>0)
 		{		
 			processIntermediate(0);
 		}
@@ -326,7 +330,7 @@ public class IterativeAveraging implements PlugIn, DialogListener {
 			}
 			IJ.log("Iteration "+Integer.toString(iter+1)+" average CC " + df.format(avrgCC) +sTimeEl);			
 			
-			if(bIntermediateAverage && nIterN>0)
+			if(bSaveIntermediate && nIterN>0)
 			{
 				processIntermediate(iter+1);
 			}
@@ -365,7 +369,7 @@ public class IterativeAveraging implements PlugIn, DialogListener {
 		//calculate final average image		
 		IJ.log("calculating final average image..");
 		
-		imgs_avrg_out = getAlignedRAI(shifts, true); 
+		imgs_avrg_out = getAlignedRAIs(shifts, true); 
 	
 		IntervalView<FloatType> finalAver = AverageWithoutZero.averageArray(imgs_avrg_out, bIgnoreZeroInAveraging);
 		
@@ -379,17 +383,17 @@ public class IterativeAveraging implements PlugIn, DialogListener {
 		
 		if(bOutputInput)
 		{
-				DirectoryChooser dc = new DirectoryChooser ( "Choose a folder to save output..." );
-				String sPath = dc.getDirectory();
-				if(sPath == null || finalAver == null)
-					return;
+
+				IJ.log("saving registered inputs...");
 				ImagePlus temp;
 				for(i=0;i<nImageN;i++)
 				{
-					temp = MiscUtils.wrapFloatImgCal(Views.interval(Views.extendZero(imgs_avrg_out.get(i)),finalAver),"iter_aver_"+imageSet.image_names.get(i),imageSet.cal, imageSet.bMultiCh); 
+					temp = MiscUtils.wrapFloatImgCal(Views.interval(Views.extendZero(imgs_avrg_out.get(i)),finalAver),"reg_"+imageSet.image_names.get(i), imageSet.cal, imageSet.bMultiCh); 
 	
-					IJ.saveAsTiff(temp, sPath+temp.getTitle());
+					IJ.saveAsTiff(temp, sPathRegistered+temp.getTitle());
 				}
+				IJ.log("..done");
+
 			
 		}
 	}
@@ -552,7 +556,7 @@ public class IterativeAveraging implements PlugIn, DialogListener {
 	
 	public void processIntermediate(final int nIt)
 	{
-		ArrayList<RandomAccessibleInterval< FloatType >> imgs_avrg_out = getAlignedRAI(shifts, true); 
+		ArrayList<RandomAccessibleInterval< FloatType >> imgs_avrg_out = getAlignedRAIs(shifts, true); 
 		String sName = "intermediate_average_"+Integer.toString(nIt);
 		ImagePlus temp;
 		temp = MiscUtils.wrapFloatImgCal(AverageWithoutZero.averageArray(imgs_avrg_out, bIgnoreZeroInAveraging),sName,imageSet.cal,imageSet.bMultiCh);
@@ -629,9 +633,8 @@ public class IterativeAveraging implements PlugIn, DialogListener {
 			}
 		}
 		gd1.addMessage("Output:");
-		gd1.addCheckbox("Show intermediate average?", Prefs.get("RegisterNDFFT.IA.bShowIntermediateAverage",false));
-		gd1.addCheckbox("If yes, save intermediate on disk?", Prefs.get("RegisterNDFFT.IA.bSaveIntermediate",false));
-		gd1.addCheckbox("Output registered inputs?", Prefs.get("RegisterNDFFT.IA.bOutputInput",false));
+		gd1.addCheckbox("Save intermediates?", Prefs.get("RegisterNDFFT.IA.bSaveIntermediate",false));
+		gd1.addCheckbox("Save registered inputs?", Prefs.get("RegisterNDFFT.IA.bOutputInput",false));
 
 		gd1.addDialogListener(this);
 		gd1.showDialog();
@@ -731,22 +734,38 @@ public class IterativeAveraging implements PlugIn, DialogListener {
 			}
 		}
 		
-		bIntermediateAverage = gd1.getNextBoolean();
-		Prefs.set("RegisterNDFFT.IA.bShowIntermediateAverage", bIntermediateAverage);
 		bSaveIntermediate = gd1.getNextBoolean();
 		Prefs.set("RegisterNDFFT.IA.bSaveIntermediate", bSaveIntermediate);
 		bOutputInput = gd1.getNextBoolean();
 		Prefs.set("RegisterNDFFT.IA.bOutputInput", bOutputInput);
 
+		DirectoryChooser dc = new DirectoryChooser ( "Choose a folder to save output..." );
+		sPathGeneralOutput = dc.getDirectory();
+		if(sPathGeneralOutput == null)
+			return false;
 		
-		
-		if(bIntermediateAverage && bSaveIntermediate && nIterN>0)
+		if(bSaveIntermediate && nIterN>0)
 		{
-			DirectoryChooser dc = new DirectoryChooser ( "Choose a folder to save intermediate averages..." );
-			sPathIntermediate = dc.getDirectory();
-			if(sPathIntermediate == null)
-				return false;
+			sPathIntermediate  = sPathGeneralOutput +"intermediate/";
+			File theDir = new File(sPathIntermediate);
+			if (!theDir.exists())
+			{
+			    theDir.mkdirs();
+			}
+			//DirectoryChooser dc = new DirectoryChooser ( "Choose a folder to save intermediate averages..." );
+			//sPathIntermediate = dc.getDirectory();
+			//if(sPathIntermediate == null)
+				//return false;
 			
+		}
+		if(bOutputInput)
+		{
+			sPathRegistered  = sPathGeneralOutput +"registered/";
+			File theDir = new File(sPathRegistered);
+			if (!theDir.exists())
+			{
+			    theDir.mkdirs();
+			}
 		}
 		return true;
 
@@ -798,7 +817,7 @@ public class IterativeAveraging implements PlugIn, DialogListener {
 	}
 	
 	/** function returns aligned intervals **/
-	ArrayList<RandomAccessibleInterval< FloatType >> getAlignedRAI(final ArrayList<long []> shifts_, boolean bIgnoreZero)
+	ArrayList<RandomAccessibleInterval< FloatType >> getAlignedRAIs(final ArrayList<long []> shifts_, boolean bIgnoreZero)
 	{
 		ArrayList<RandomAccessibleInterval< FloatType >> imgs_avrg_out; 
 		
