@@ -308,7 +308,7 @@ public class IterativeAveraging implements PlugIn, DialogListener {
 			}
 
 			// calculate new img array with applied displacements			
-			cumShift = buildShiftedIntervals(imageSet.imgs, imgs_shift,shifts);
+			cumShift = buildShiftedIntervals(imageSet.imgs, imgs_shift, shifts);
 
 			//sumAndCount = AverageWithoutZero.sumAndCountArray(imgs_shift);
 			
@@ -371,13 +371,14 @@ public class IterativeAveraging implements PlugIn, DialogListener {
 		
 		imgs_avrg_out = getAlignedRAIs(shifts, true); 
 	
-		IntervalView<FloatType> finalAver = AverageWithoutZero.averageArray(imgs_avrg_out, bIgnoreZeroInAveraging);
+	
+		IntervalView<FloatType> finalAver = FinalOutput.averageArray(imgs_avrg_out, bIgnoreZeroInAveraging);
 		
 		MiscUtils.wrapFloatImgCal(finalAver,"final_average_"+Integer.toString(nIterMax),imageSet.cal,imageSet.bMultiCh).show();
 		IJ.log("...done.");
 		//calculate STD image
 		IJ.log("calculating final standard deviation image..");
-		IntervalView<FloatType> finalSTD = AverageWithoutZero.stdArray(imgs_avrg_out, finalAver, bIgnoreZeroInAveraging);
+		IntervalView<FloatType> finalSTD = FinalOutput.stdArray(imgs_avrg_out, finalAver, bIgnoreZeroInAveraging);
 		MiscUtils.wrapFloatImgCal(finalSTD,"final_std_"+Integer.toString(nIterMax),imageSet.cal,imageSet.bMultiCh).show();
 		IJ.log("...done.");
 		
@@ -425,50 +426,6 @@ public class IterativeAveraging implements PlugIn, DialogListener {
 			imgs_multiCh_reg.add(Views.translate(imageSet.imgs_multiCh.get(iImCount), curr_shift));
 		}
 		return imgs_multiCh_reg;
-	}
-	
-	/** given Sum and Count images alSumCnt, this function subtracts removedImage from Sum,
-	 * reduces corresponding Count voxels and returns averaged image (with coordinate origin at (0, 0, ..0) **/	
-	IntervalView<FloatType> removeOneAverage(ArrayList<IntervalView<FloatType>> alSumCnt, RandomAccessibleInterval< FloatType > removedImage)
-	{
-	
-		long [] origin = alSumCnt.get(0).minAsLongArray();
-		final Img<FloatType> avrgImgArr = ArrayImgs.floats(alSumCnt.get(0).dimensionsAsLongArray());
-		final IntervalView<FloatType> avrgImg = Views.translate(avrgImgArr, origin );		
-		final IntervalView<FloatType> removeInt = Views.interval(Views.extendZero(removedImage), avrgImg);
-		Cursor<FloatType> avrgC = avrgImg.cursor();
-		Cursor<FloatType> remC = removeInt.cursor();
-		Cursor<FloatType> sumC = alSumCnt.get(0).cursor();
-		Cursor<FloatType> cntC = alSumCnt.get(1).cursor();
-		float fCnt, fRem, fSum;
-		while(avrgC.hasNext())
-		{
-			
-			avrgC.fwd();
-			remC.fwd();
-			sumC.fwd();
-			cntC.fwd();
-			fSum = sumC.get().get();
-			fRem = remC.get().get();
-			fCnt = cntC.get().get();
-			if(fRem>0.0f)
-			{
-				fSum-=fRem;
-				fCnt--;
-			}		
-			
-			if (fCnt>0.5f)
-			{
-				avrgC.get().set(fSum/fCnt);
-			}
-			else
-			{
-				avrgC.get().set(0.0f);
-			}
-		}
-				
-		//return Views.zeroMin(avrgImg);
-		return avrgImg;
 	}
 	
 	
@@ -557,9 +514,24 @@ public class IterativeAveraging implements PlugIn, DialogListener {
 	public void processIntermediate(final int nIt)
 	{
 		ArrayList<RandomAccessibleInterval< FloatType >> imgs_avrg_out = getAlignedRAIs(shifts, true); 
-		String sName = "intermediate_average_"+Integer.toString(nIt);
+		String sName =""; 
+		
+		switch(nAveragingAim)
+		{
+			case TemplateAveraging.AVERAGE:
+				sName="it_avg_";
+				break;
+			case TemplateAveraging.MEDIAN:
+				sName="it_med_";
+				break;
+			case TemplateAveraging.MASKED_AVERAGE:
+				sName="it_mask_avg_";
+				break;
+		}
+		
+		sName = sName+Integer.toString(nIt);
 		ImagePlus temp;
-		temp = MiscUtils.wrapFloatImgCal(AverageWithoutZero.averageArray(imgs_avrg_out, bIgnoreZeroInAveraging),sName,imageSet.cal,imageSet.bMultiCh);
+		temp = MiscUtils.wrapFloatImgCal(FinalOutput.averageArray(imgs_avrg_out, bIgnoreZeroInAveraging),sName,imageSet.cal,imageSet.bMultiCh);
 		if(bSaveIntermediate)
 		{
 			IJ.saveAsTiff(temp, sPathIntermediate +temp.getTitle());
@@ -665,6 +637,15 @@ public class IterativeAveraging implements PlugIn, DialogListener {
 		IJ.log("Initial template: "+ sIniTemplate[nIniTemplate]);
 		
 		IJ.log("Template calculation: "+ sAveragingAim[nAveragingAim]);
+		if(nAveragingAim == TemplateAveraging.AVERAGE)
+		{
+			bIgnoreZeroInAveraging = false;
+		}
+		if(nAveragingAim == TemplateAveraging.MASKED_AVERAGE)
+		{
+			bIgnoreZeroInAveraging = true;
+		}
+
 		
 		if(bZeroMask)
 		{
@@ -752,10 +733,6 @@ public class IterativeAveraging implements PlugIn, DialogListener {
 			{
 			    theDir.mkdirs();
 			}
-			//DirectoryChooser dc = new DirectoryChooser ( "Choose a folder to save intermediate averages..." );
-			//sPathIntermediate = dc.getDirectory();
-			//if(sPathIntermediate == null)
-				//return false;
 			
 		}
 		if(bOutputInput)

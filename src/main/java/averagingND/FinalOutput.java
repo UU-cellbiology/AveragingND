@@ -17,7 +17,7 @@ import net.imglib2.util.Intervals;
 import net.imglib2.view.IntervalView;
 import net.imglib2.view.Views;
 
-public class AverageWithoutZero implements PlugIn {
+public class FinalOutput implements PlugIn {
 
 	public boolean multiCh = false;
 	@Override
@@ -211,102 +211,5 @@ public class AverageWithoutZero implements PlugIn {
 		return stdImg;
 
 	}
-	/** Provided with an ArrayList of RAIs, returns a new ArrayList with two RAIs:
-	 * the first contains cumulative sum of all intensities at a current voxel/pixel location,
-	 * the second contains an integer value equal to how many RAIs have a pixel at this location. 
-	 * Since input RAIs could be of different sizes/locations, the output size is made to include
-	 * all of them, i.e. a hyper box that includes them all **/
-	
-	public static ArrayList<IntervalView<FloatType>> sumAndCountArray(ArrayList<RandomAccessibleInterval< FloatType >> imgs)
-	{
-		int i;
 
-		FinalInterval intervalMax = getIntervalAverageArray(imgs);
-		
-		ArrayList<IntervalView< FloatType >> interv = new ArrayList<IntervalView< FloatType >>();
-		
-		for(i=0;i<imgs.size();i++)
-		{
-			interv.add(Views.interval( Views.extendZero(imgs.get(i)),intervalMax));
-		}
-		
-		ArrayList<Cursor< FloatType >> cursors = new ArrayList<Cursor< FloatType >>();
-		for(i=0;i<interv.size();i++)
-		{
-			cursors.add(interv.get(i).cursor());
-		}
-		
-		final Img<FloatType> sumImgArr = ArrayImgs.floats(intervalMax.dimensionsAsLongArray());
-		final Img<FloatType> countImgArr = ArrayImgs.floats(intervalMax.dimensionsAsLongArray());
-		
-		long [] originCoord = intervalMax.minAsLongArray();
-		
-		final IntervalView<FloatType> sumImg = Views.translate(sumImgArr, originCoord);
-		final IntervalView<FloatType> countImg = Views.translate(countImgArr, originCoord);
-
-		Cursor<FloatType> sumC = sumImg.cursor();
-		Cursor<FloatType> cntC = countImg.cursor();
-		Cursor<FloatType> imgC;
-		long nNumVal;
-		double nSumVal;
-		float nValCur;
-		
-		while(sumC.hasNext())
-		{
-			sumC.fwd();
-			cntC.fwd();
-			nNumVal = 0;
-			nSumVal = 0;
-			for(i=0;i<cursors.size();i++)
-			{
-				imgC=cursors.get(i);
-				imgC.fwd();
-				nValCur=imgC.get().get();
-				if(nValCur > 0.0000001)
-				{
-					nNumVal++;
-					nSumVal += nValCur;
-				}
-			}
-			if(nNumVal > 0)
-			{
-				sumC.get().set((float)nSumVal);
-				cntC.get().set((float)nNumVal);
-			}
-		}
-
-		ArrayList<IntervalView<FloatType>> finalSumCnt = new ArrayList<IntervalView<FloatType>>();
-		finalSumCnt.add(sumImg);
-		finalSumCnt.add(countImg);
-		
-		return finalSumCnt;
-
-	}
-	/** returns an average RAI. It is assumed provided ArrayList contains two RAIs:
-	 * first being cumulative intensity values and the second is count number.
-	 * The returned RAI origin is always at zero (zeroMin) **/
-	public static IntervalView<FloatType> averageFromSumAndCount(ArrayList<IntervalView<FloatType>> alSumCnt)
-	{
-
-		long [] origin = alSumCnt.get(0).minAsLongArray();
-		final Img<FloatType> avrgImgArr = ArrayImgs.floats(alSumCnt.get(0).dimensionsAsLongArray());
-		final IntervalView<FloatType> avrgImg = Views.translate(avrgImgArr, origin );
-		Cursor<FloatType> avrgC = avrgImg.cursor();
-		Cursor<FloatType> sumC = alSumCnt.get(0).cursor();
-		Cursor<FloatType> cntC = alSumCnt.get(1).cursor();
-		float fCnt;
-		while(avrgC.hasNext())
-		{
-			avrgC.fwd();
-			sumC.fwd();
-			cntC.fwd();
-			fCnt=cntC.get().get();
-			if(fCnt>0.0f)
-			{
-				avrgC.get().set(sumC.get().get()/fCnt);
-			}
-		}				
-		
-		return Views.zeroMin(avrgImg);
-	}
 }

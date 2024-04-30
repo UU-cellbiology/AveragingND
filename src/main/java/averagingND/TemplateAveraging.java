@@ -7,6 +7,7 @@ import net.imglib2.FinalInterval;
 import net.imglib2.RandomAccessibleInterval;
 import net.imglib2.img.Img;
 import net.imglib2.img.array.ArrayImgs;
+import net.imglib2.img.display.imagej.ImageJFunctions;
 import net.imglib2.type.numeric.real.FloatType;
 import net.imglib2.util.Intervals;
 import net.imglib2.view.IntervalView;
@@ -102,6 +103,7 @@ public class TemplateAveraging {
 		{
 			initCurrentTemplate();
 		}
+		final float nIm = nImgN-1.0f;
 		
 		final IntervalView<FloatType> removeInt = Views.interval(Views.extendZero(currentImage), currentTemplate);
 		final Cursor<FloatType> avrgC = currentTemplate.cursor();
@@ -113,10 +115,9 @@ public class TemplateAveraging {
 			avrgC.fwd();
 			remC.fwd();
 			sumC.fwd();
-			avrgC.get().set((sumC.get().get()-remC.get().get())/((float)nImgN));
-
+			avrgC.get().set((sumC.get().get()-remC.get().get())/nIm);
 		}
-				
+		//ImageJFunctions.show(currentTemplate, "Xffs");	
 		//return Views.zeroMin(avrgImg);
 		return currentTemplate;
 	}
