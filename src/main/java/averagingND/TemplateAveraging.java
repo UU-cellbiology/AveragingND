@@ -25,7 +25,7 @@ public class TemplateAveraging {
 	public IntervalView<FloatType> currentTemplate = null;
 	
 	/** possible types of ImageSet statistics stored **/
-	public static final int AVERAGE=0, MEDIAN=1, MASKED_AVERAGE=2; 
+	public static final int AVERAGE=0, MASKED_AVERAGE=1, MEDIAN=2; 
 	
 	/** specific type that is used to analyze data**/
 	public int nStatType;
@@ -50,10 +50,10 @@ public class TemplateAveraging {
 			case AVERAGE:
 				unionInterval = sumArray(imgs_, current_stat);
 				break;
-			case MEDIAN:
-				break;
 			case MASKED_AVERAGE:
 				unionInterval = sumAndCountArray(imgs_, current_stat);
+				break;
+			case MEDIAN:
 				break;
 		}
 		currentTemplate = null;
@@ -76,10 +76,10 @@ public class TemplateAveraging {
 			case AVERAGE:
 				out = getTemplateForImageAverage(currentImage);
 				break;
-			case MEDIAN:
-				break;
 			case MASKED_AVERAGE:
 				out = getTemplateForImageMaskedAverage(currentImage);
+				break;
+			case MEDIAN:
 				break;
 		}
 		

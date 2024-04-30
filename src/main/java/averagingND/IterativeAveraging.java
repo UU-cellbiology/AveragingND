@@ -73,7 +73,7 @@ public class IterativeAveraging implements PlugIn, DialogListener {
 	
 	String sPathRegistered = "";
 	
-	/** for now it cannot be changed by user **/
+	/** whether to use simple average or zero masked **/
 	public boolean bIgnoreZeroInAveraging = true;
 
 	/** constrains during the averaging
@@ -521,12 +521,12 @@ public class IterativeAveraging implements PlugIn, DialogListener {
 			case TemplateAveraging.AVERAGE:
 				sName="it_avg_";
 				break;
-			case TemplateAveraging.MEDIAN:
-				sName="it_med_";
-				break;
 			case TemplateAveraging.MASKED_AVERAGE:
 				sName="it_mask_avg_";
 				break;
+			//case TemplateAveraging.MEDIAN:
+			//	sName="it_med_";
+			//	break;
 		}
 		
 		sName = sName+Integer.toString(nIt);
@@ -565,7 +565,7 @@ public class IterativeAveraging implements PlugIn, DialogListener {
 		double [] dLimits = new double [nDimReg];
 		
 		final String[] sIniTemplate = new String[ ]{"Centered","Zero (top-left)"};
-		final String[] sAveragingAim = new String[ ]{"Average","Median","Zero masked average"};
+		final String[] sAveragingAim = new String[ ]{"Average","Zero masked average"}; //"Median",
 		final String[] limitsReg = new String[  ] {"No","by voxels", "by image fraction"};
 		final GenericDialog gd1 = new GenericDialog( "Averaging parameters" );
 		if(imageSet.bMultiCh)
