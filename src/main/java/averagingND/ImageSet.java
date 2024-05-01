@@ -15,15 +15,29 @@ import ij.IJ;
 import ij.ImagePlus;
 import ij.WindowManager;
 import ij.measure.Calibration;
-
+import io.scif.config.SCIFIOConfig;
+import io.scif.config.SCIFIOConfig.ImgMode;
+import io.scif.img.ImgOpener;
+import io.scif.img.SCIFIOImgPlus;
+import net.imglib2.Cursor;
 import net.imglib2.RandomAccessibleInterval;
+import net.imglib2.converter.Converter;
 import net.imglib2.img.ImagePlusAdapter;
+import net.imglib2.img.Img;
+import net.imglib2.img.imageplus.ImagePlusImg;
+import net.imglib2.img.imageplus.ImagePlusImgFactory;
+import net.imglib2.type.Type;
+import net.imglib2.type.numeric.ARGBType;
+import net.imglib2.type.numeric.ComplexType;
+import net.imglib2.type.numeric.integer.UnsignedByteType;
+import net.imglib2.type.numeric.integer.UnsignedShortType;
 import net.imglib2.type.numeric.real.FloatType;
 import net.imglib2.view.Views;
 
 /** class containing a collection of images with info about them,
  * plus function to load them **/
-public class ImageSet {
+public class ImageSet 
+{
 	
 	/** original images (with full channels) **/
 	public ArrayList<RandomAccessibleInterval< FloatType >> imgs_multiCh;
@@ -42,6 +56,7 @@ public class ImageSet {
 	
 	public int nChannels;
 	public int nSlices;
+	
 	int nTimePoints;
 
 	public int alignChannel = 1;
@@ -62,6 +77,8 @@ public class ImageSet {
 	 * 	1 - images form disk **/
 	public int nSource;
 	
+	public static final int OPENED = 0, LOAD_MEMORY = 1, CACHED = 2;
+	
 	/** text representation of dimensions in the format of XYZCT **/
 	public String sRefDims;
 	
@@ -79,7 +96,7 @@ public class ImageSet {
 	//	return;
 	boolean initializeFromDisk(String sPath, String sFileExtension_)
 	{
-		nSource = 1;
+		
 		sFileExtension = sFileExtension_;
 		// getting list of files
 		filenames = null;
@@ -121,7 +138,6 @@ public class ImageSet {
 	
 	boolean initializeFromOpenWindows()
 	{
-		nSource = 0;
 
 		idList = WindowManager.getIDList();		
 
@@ -138,6 +154,7 @@ public class ImageSet {
 	}
 	
 	
+	@SuppressWarnings("unchecked")
 	boolean loadAllImages()
 	{
 		int i;
@@ -146,31 +163,57 @@ public class ImageSet {
 		ImagePlus imageIn;
 		int nTryImages;
 	
-		if(nSource == 0)
+		if(nSource == OPENED)
 			nTryImages = idList.length;
 		else
 			nTryImages = filenames.size();
+		
 
 		for(i=0;i<nTryImages;i++)
 		{
-			if(nSource==0)
+			if(nSource == OPENED)
 			{
 				imageIn = WindowManager.getImage(idList[i]);
 			}
 			else
 			{
-				imageIn = IJ.openImage(filenames.get(i));
-			}
-			if(checkConsistency(imageIn))
-			{
-				if(!bMultiCh)
+				if(nSource == CACHED)
 				{
-					imgs.add(ImagePlusAdapter.convertFloat(imageIn));				
+					imageIn = IJ.openVirtual(filenames.get(i));
+					
 				}
 				else
 				{
-					imgs_multiCh.add(ImagePlusAdapter.convertFloat(imageIn));
-					imgs.add(Views.hyperSlice(imgs_multiCh.get(i),2,alignChannel));
+					imageIn = IJ.openImage(filenames.get(i));
+				}
+			}
+			if(checkConsistency(imageIn))
+			{
+				if(nSource != CACHED)
+				{
+					if(!bMultiCh)
+					{
+						imgs.add(ImagePlusAdapter.convertFloat(imageIn));				
+					}
+					else
+					{
+						imgs_multiCh.add(ImagePlusAdapter.convertFloat(imageIn));
+						imgs.add(Views.hyperSlice(imgs_multiCh.get(i),2,alignChannel));
+					}
+				}
+				else
+				{
+					Img<FloatType> imgF = FloatTiffImgWrap.wrapVirtualFloat(imageIn, sRefDimsIJ);
+					if(!bMultiCh)
+					{
+						imgs.add(imgF);				
+					}
+					else
+					{
+						imgs_multiCh.add(imgF);
+						imgs.add(Views.hyperSlice(imgs_multiCh.get(i),2,alignChannel));
+					}
+					
 				}
 
 				image_names.add(imageIn.getTitle());
@@ -180,8 +223,32 @@ public class ImageSet {
 			{
 				return false;
 			}
-		}	
+		}
 
+
+		calculateLogMinMax();
+		
+		IJ.showProgress(2,2);
+		IJ.showStatus("Loading images..done.");	
+		if(nImageN<2)
+		{
+			IJ.error( "The plugin requires at least two images with the same dimensions. Aborting." );
+			return false;
+		}
+		if(!bMultiCh)
+		{
+			IJ.log("Averaging "+ Integer.toString(nImageN) + " images.");
+		}
+		else
+		{
+			IJ.log("Averaging "+Integer.toString(nImageN) + " images with " + Integer.toString(nChannels) + " channels.");
+			IJ.log("Using channel "+Integer.toString(alignChannel+1) + " for alignment.");
+		}
+		return true;
+	}
+	
+	void calculateLogMinMax()
+	{
 		//calculate min max 
 		long [] dimsMin = new long [nDim];
 		long [] dimsMax = new long [nDim];
@@ -196,7 +263,7 @@ public class ImageSet {
 			imgs_multiCh.get(0).dimensions(dimsMin);
 			imgs_multiCh.get(0).dimensions(dimsMax);
 		}
-		for(i=1;i<nImageN;i++)
+		for(int i=1;i<nImageN;i++)
 		{
 			if(!bMultiCh)
 			{
@@ -217,29 +284,12 @@ public class ImageSet {
 					dimsMax[d] = currDim[d];
 				}
 			}
-		}
+		}	
 		IJ.log("Dimension ranges of the input images:");
 		for(int d=0;d<nDim;d++)
 		{
 			IJ.log("Axis "+sRefDimsIJ.charAt(d)+" min: "+Long.toString(dimsMin[d])+" max: "+Long.toString(dimsMax[d]));
 		}
-		IJ.showProgress(2,2);
-		IJ.showStatus("Loading images..done.");	
-		if(nImageN<2)
-		{
-			IJ.error( "The plugin requires at least two images with the same dimensions. Aborting." );
-			return false;
-		}
-		if(!bMultiCh)
-		{
-			IJ.log("Averaging "+ Integer.toString(nImageN) + " images.");
-		}
-		else
-		{
-			IJ.log("Averaging "+Integer.toString(nImageN) + " images with " + Integer.toString(nChannels) + " channels.");
-			IJ.log("Using channel "+Integer.toString(alignChannel+1) + " for alignment.");
-		}
-		return true;
 	}
 	
 	boolean checkConsistency(final ImagePlus imageIn)
@@ -340,4 +390,24 @@ public class ImageSet {
 		}
 		
 	}
+	
+	protected static < T extends Type< T > > Img< FloatType > convertToFloat(
+			final Img< T > input, final Converter< T, FloatType > c )
+	{
+		final ImagePlusImg< FloatType, ? > output = new ImagePlusImgFactory<>( new FloatType() ).create( input );
+
+		final Cursor< T > in = input.cursor();
+		final Cursor< FloatType > out = output.cursor();
+
+		while ( in.hasNext() )
+		{
+			in.fwd();
+			out.fwd();
+
+			c.convert( in.get(), out.get() );
+		}
+
+		return output;
+	}
+
 }

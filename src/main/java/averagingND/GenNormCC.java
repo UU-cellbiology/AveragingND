@@ -9,6 +9,8 @@ import net.imglib2.Point;
 import net.imglib2.RandomAccessibleInterval;
 import net.imglib2.algorithm.fft2.FFT;
 import net.imglib2.algorithm.fft2.FFTMethods;
+import net.imglib2.converter.Converter;
+import net.imglib2.converter.Converters;
 import net.imglib2.img.Img;
 import net.imglib2.img.ImgFactory;
 import net.imglib2.img.ImgView;
@@ -17,6 +19,9 @@ import net.imglib2.img.array.ArrayImgFactory;
 import net.imglib2.img.array.ArrayImgs;
 import net.imglib2.img.basictypeaccess.array.FloatArray;
 import net.imglib2.img.display.imagej.ImageJFunctions;
+import net.imglib2.img.imageplus.ImagePlusImg;
+import net.imglib2.img.imageplus.ImagePlusImgFactory;
+import net.imglib2.type.Type;
 import net.imglib2.type.numeric.complex.ComplexFloatType;
 import net.imglib2.type.numeric.real.FloatType;
 import net.imglib2.util.Intervals;
@@ -170,12 +175,13 @@ public class GenNormCC {
 		//ImageJFunctions.show(padUnitTem).setTitle( "unipadded2" );
 	
 		//squared image values
-		Img< FloatType > sqImg = ImgView.wrap(image).copy();
-		Img< FloatType > sqTem = ImgView.wrap(template).copy();
-		
-		sqImg.forEach(t-> t.mul(t.get()));
-		sqTem.forEach(t-> t.mul(t.get()));
-		
+		//Img< FloatType > sqImg = ImgView.wrap(image).copy();
+		//Img< FloatType > sqTem = ImgView.wrap(template).copy();
+		//sqImg.forEach(t-> t.mul(t.get()));
+		//sqTem.forEach(t-> t.mul(t.get()));
+		RandomAccessibleInterval< FloatType > sqImg = Converters.convert(image, ( in,out )-> {out.set(in.get()*in.get());}, new FloatType()); 
+		RandomAccessibleInterval< FloatType > sqTem =  Converters.convert(template, ( in,out )-> {out.set(in.get()*in.get());}, new FloatType()); 
+
 		//padded squared images
 		IntervalView< FloatType > padSqImg = Views.interval(Views.extendZero(sqImg),imgIntPad);
 		IntervalView< FloatType > padSqTem = Views.interval(Views.extendZero(sqTem),temIntPad);
@@ -200,12 +206,14 @@ public class GenNormCC {
 		FFTMethods.complexConjugate(sqTemplateFFT2);	
 		
 		//multiplications
+	    final Img< ComplexFloatType > I1F2F2 = multCompl(unImageFFT2,sqTemplateFFT2);
+	    
 		final Img< ComplexFloatType > deNOM = multCompl(unImageFFT2,unTemplateFFT2);
 	    final Img< ComplexFloatType > F1F2 = multCompl(imageFFT2,templateFFT2);
 	    final Img< ComplexFloatType > F1I2 = multCompl(imageFFT2,unTemplateFFT2);
 	    final Img< ComplexFloatType > I1F2 = multCompl(unImageFFT2,templateFFT2);
 	    final Img< ComplexFloatType > F1F1I2 = multCompl(sqImageFFT2,unTemplateFFT2);
-	    final Img< ComplexFloatType > I1F2F2 = multCompl(unImageFFT2,sqTemplateFFT2);
+
 	    
 	    //inverse FFT
 		final Img< FloatType > invdeNOM = FFT.complexToReal(deNOM, factoryFloat, new FloatType());	
@@ -458,4 +466,5 @@ public class GenNormCC {
 	    
 	    return output;
 	}
+
 }

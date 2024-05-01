@@ -21,11 +21,10 @@ import ij.io.DirectoryChooser;
 import ij.measure.ResultsTable;
 import ij.plugin.PlugIn;
 
-import net.imglib2.Cursor;
 import net.imglib2.FinalInterval;
 import net.imglib2.RandomAccessibleInterval;
-import net.imglib2.img.Img;
-import net.imglib2.img.array.ArrayImgs;
+import net.imglib2.type.NativeType;
+import net.imglib2.type.numeric.RealType;
 import net.imglib2.type.numeric.real.FloatType;
 import net.imglib2.view.IntervalView;
 import net.imglib2.view.Views;
@@ -108,6 +107,10 @@ public class IterativeAveraging implements PlugIn, DialogListener {
 	 *  2 - zero masked average **/
 	int nAveragingAim;
 	
+	boolean bShowSD = false;
+	
+	boolean bLoadCached = false;
+	
 	@Override
 	public void run(String paramString) {
 	
@@ -122,9 +125,10 @@ public class IterativeAveraging implements PlugIn, DialogListener {
 		DecimalFormat df = new DecimalFormat ("#.########", symbols);
 		DecimalFormat df1 = new DecimalFormat ("#.#", symbols);
 		
-		final String[] sInput = new String[2];
+		final String[] sInput = new String[3];
 		sInput[0] = "All currently open images";
-		sInput[1] = "Specify images in a folder";
+		sInput[1] = "Tif files (high memory, fast)";
+		sInput[2] = "Tif files (low memory, slow)";
 		
 		final GenericDialog gdFiles = new GenericDialog( "Iterative averaging" );
 
@@ -143,14 +147,25 @@ public class IterativeAveraging implements PlugIn, DialogListener {
 		//init arrays			
 		imgs_shift = new ArrayList<RandomAccessibleInterval< FloatType >>();
 		shifts = new ArrayList<long []>();
-
-		if(nInputType == 0)
+		imageSet.nSource = nInputType;
+		
+		if(nInputType == ImageSet.OPENED)
 		{
 			if(!imageSet.initializeFromOpenWindows())
 				return;	 
+			IJ.log("Using images already opened in ImageJ/Fiji.");
 		}
 		else
 		{
+			if(nInputType == ImageSet.LOAD_MEMORY)
+			{
+				IJ.log("Loading all images to memory.");
+			}
+			else
+			{
+				IJ.log("Using cached reading of images.");				
+			}
+
 			DirectoryChooser dc = new DirectoryChooser ( "Choose a folder with images.." );
 			String sPath = dc.getDirectory();
 			if(!imageSet.initializeFromDisk(sPath, ".tif"))
@@ -363,25 +378,39 @@ public class IterativeAveraging implements PlugIn, DialogListener {
 			IJ.log("Iteration count is equal to zero, no registration was done, just averaging.");
 		}
 		ptable.show("Results");
+		ptable.save(sPathGeneralOutput+"Results.csv");
 		ptableCC.show("Average CC");
+		ptableCC.save(sPathGeneralOutput+"Average_CC.csv");
 		shifts = maxAverCCshifts;
 		
 		//calculate final average image		
-		IJ.log("calculating final average image..");
-		
+		IJ.log("calculating final average image..");		
 		imgs_avrg_out = getAlignedRAIs(shifts, true); 
-	
-	
 		IntervalView<FloatType> finalAver = FinalOutput.averageArray(imgs_avrg_out, bIgnoreZeroInAveraging);
-		
-		MiscUtils.wrapFloatImgCal(finalAver,"final_average_"+Integer.toString(nIterMax),imageSet.cal,imageSet.bMultiCh).show();
+		String sOutFinalName = "";
+		switch(nAveragingAim)
+		{
+			case TemplateAveraging.AVERAGE:
+				sOutFinalName ="final_avg_";
+			break;
+			case TemplateAveraging.MASKED_AVERAGE:
+				sOutFinalName ="final_mask_avg_";
+			break;
+		}
+		sOutFinalName = sOutFinalName +Integer.toString(nIterMax);
+		ImagePlus tempFin = MiscUtils.wrapFloatImgCal(finalAver,sOutFinalName,imageSet.cal,imageSet.bMultiCh);
+		IJ.saveAsTiff(tempFin, sPathGeneralOutput+sOutFinalName);
 		IJ.log("...done.");
 		//calculate STD image
-		IJ.log("calculating final standard deviation image..");
-		IntervalView<FloatType> finalSTD = FinalOutput.stdArray(imgs_avrg_out, finalAver, bIgnoreZeroInAveraging);
-		MiscUtils.wrapFloatImgCal(finalSTD,"final_std_"+Integer.toString(nIterMax),imageSet.cal,imageSet.bMultiCh).show();
-		IJ.log("...done.");
-		
+		if(bShowSD)
+		{
+			IJ.log("calculating final standard deviation image..");
+			String sSDName = "final_std_"+Integer.toString(nIterMax);
+			IntervalView<FloatType> finalSTD = FinalOutput.stdArray(imgs_avrg_out, finalAver, bIgnoreZeroInAveraging);
+			ImagePlus finSD = MiscUtils.wrapFloatImgCal(finalSTD,sSDName,imageSet.cal,imageSet.bMultiCh);
+			IJ.saveAsTiff(finSD, sPathGeneralOutput+sSDName);
+			IJ.log("...done.");
+		}
 		if(bOutputInput)
 		{
 
@@ -607,6 +636,7 @@ public class IterativeAveraging implements PlugIn, DialogListener {
 		gd1.addMessage("Output:");
 		gd1.addCheckbox("Save intermediates?", Prefs.get("RegisterNDFFT.IA.bSaveIntermediate",false));
 		gd1.addCheckbox("Save registered inputs?", Prefs.get("RegisterNDFFT.IA.bOutputInput",false));
+		gd1.addCheckbox("Save SD image?", Prefs.get("RegisterNDFFT.IA.bShowSD",false));
 
 		gd1.addDialogListener(this);
 		gd1.showDialog();
@@ -717,9 +747,13 @@ public class IterativeAveraging implements PlugIn, DialogListener {
 		
 		bSaveIntermediate = gd1.getNextBoolean();
 		Prefs.set("RegisterNDFFT.IA.bSaveIntermediate", bSaveIntermediate);
+		
 		bOutputInput = gd1.getNextBoolean();
 		Prefs.set("RegisterNDFFT.IA.bOutputInput", bOutputInput);
-
+		
+		bShowSD = gd1.getNextBoolean();
+		Prefs.set("RegisterNDFFT.IA.bShowSD", bShowSD);
+		
 		DirectoryChooser dc = new DirectoryChooser ( "Choose a folder to save output..." );
 		sPathGeneralOutput = dc.getDirectory();
 		if(sPathGeneralOutput == null)
