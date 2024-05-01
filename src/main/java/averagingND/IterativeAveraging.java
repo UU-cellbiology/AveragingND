@@ -202,7 +202,8 @@ public class IterativeAveraging implements PlugIn, DialogListener {
 			processIntermediate(0);
 		}
 		
-		GenNormCC normCC = new GenNormCC();
+		//GenNormCC normCC = new GenNormCC();
+		MaskedNormCC normCC = new MaskedNormCC();
 		normCC.bVerbose = false;
 		normCC.bZeroMask = bZeroMask;
 		normCC.lim_fractions = lim_fractions;
@@ -268,7 +269,8 @@ public class IterativeAveraging implements PlugIn, DialogListener {
 				//currAverageImg = removeOneAverage(sumAndCount,imgs_shift.get(i));
 				//ImageJFunctions.show(currAverageImg, "aver"+Integer.toString(i+1));
 				//removeOneAverage
-				normCC.caclulateGenNormCC(Views.zeroMin(currAverageImg), imageSet.imgs.get(i), false);
+				//normCC.caclulateGenNormCC(Views.zeroMin(currAverageImg), imageSet.imgs.get(i), false);
+				normCC.caclulateMaskedNormCC(Views.zeroMin(currAverageImg), imageSet.imgs.get(i), false);
 				
 				avrgCC+=normCC.dMaxCC;
 				listCC[i]=normCC.dMaxCC;

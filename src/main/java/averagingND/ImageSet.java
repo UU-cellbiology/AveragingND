@@ -15,10 +15,7 @@ import ij.IJ;
 import ij.ImagePlus;
 import ij.WindowManager;
 import ij.measure.Calibration;
-import io.scif.config.SCIFIOConfig;
-import io.scif.config.SCIFIOConfig.ImgMode;
-import io.scif.img.ImgOpener;
-import io.scif.img.SCIFIOImgPlus;
+
 import net.imglib2.Cursor;
 import net.imglib2.RandomAccessibleInterval;
 import net.imglib2.converter.Converter;
@@ -27,10 +24,6 @@ import net.imglib2.img.Img;
 import net.imglib2.img.imageplus.ImagePlusImg;
 import net.imglib2.img.imageplus.ImagePlusImgFactory;
 import net.imglib2.type.Type;
-import net.imglib2.type.numeric.ARGBType;
-import net.imglib2.type.numeric.ComplexType;
-import net.imglib2.type.numeric.integer.UnsignedByteType;
-import net.imglib2.type.numeric.integer.UnsignedShortType;
 import net.imglib2.type.numeric.real.FloatType;
 import net.imglib2.view.Views;
 
@@ -153,8 +146,6 @@ public class ImageSet
 		return true;
 	}
 	
-	
-	@SuppressWarnings("unchecked")
 	boolean loadAllImages()
 	{
 		int i;

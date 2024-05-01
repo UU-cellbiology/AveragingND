@@ -1,7 +1,9 @@
 package averagingND;
 
-import ij.IJ;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 
+import ij.IJ;
 import net.imglib2.Cursor;
 import net.imglib2.FinalDimensions;
 import net.imglib2.FinalInterval;
@@ -9,27 +11,24 @@ import net.imglib2.Point;
 import net.imglib2.RandomAccessibleInterval;
 import net.imglib2.algorithm.fft2.FFT;
 import net.imglib2.algorithm.fft2.FFTMethods;
-import net.imglib2.converter.Converter;
 import net.imglib2.converter.Converters;
 import net.imglib2.img.Img;
 import net.imglib2.img.ImgFactory;
-import net.imglib2.img.ImgView;
 import net.imglib2.img.array.ArrayImg;
 import net.imglib2.img.array.ArrayImgFactory;
 import net.imglib2.img.array.ArrayImgs;
 import net.imglib2.img.basictypeaccess.array.FloatArray;
 import net.imglib2.img.display.imagej.ImageJFunctions;
-import net.imglib2.img.imageplus.ImagePlusImg;
-import net.imglib2.img.imageplus.ImagePlusImgFactory;
-import net.imglib2.type.Type;
+import net.imglib2.loops.LoopBuilder;
+import net.imglib2.parallel.Parallelization;
+import net.imglib2.parallel.TaskExecutor;
 import net.imglib2.type.numeric.complex.ComplexFloatType;
 import net.imglib2.type.numeric.real.FloatType;
 import net.imglib2.util.Intervals;
 import net.imglib2.view.IntervalView;
 import net.imglib2.view.Views;
-@Deprecated
-public class GenNormCC {
-	
+
+public class MaskedNormCC {
 	/** dimensionality of images **/	
 	private int nDim;
 	
@@ -59,13 +58,14 @@ public class GenNormCC {
 	 * the boundaries are always strange **/
 	final double max_fraction_shift = 0.9;	
 	
-	/** 		//ImagePlus imageIn = IJ.openVirtual("/home/eugene/Desktop/projects/UnequalTiffs/BB/001f.tif");
-		//Img< FloatType >img = FloatTiffImgWrap.wrapVirtualFloat(imageIn, MiscUtils.getDimensionsTextImageJ(imageIn));
-		//ImageJFunctions.show(img, "test_raw");
+	ExecutorService es;
+	TaskExecutor taskExecutor;
+	
+	/** 
 	 * @param image
 	 * @param template
 	 */
-	public boolean caclulateGenNormCC(final RandomAccessibleInterval< FloatType > image, final RandomAccessibleInterval< FloatType > template,  final boolean bShowCC)
+	public boolean caclulateMaskedNormCC(final RandomAccessibleInterval< FloatType > image, final RandomAccessibleInterval< FloatType > template,  final boolean bShowCC)
 	{
 		int i;
 				
@@ -182,7 +182,7 @@ public class GenNormCC {
 		//sqImg.forEach(t-> t.mul(t.get()));
 		//sqTem.forEach(t-> t.mul(t.get()));
 		RandomAccessibleInterval< FloatType > sqImg = Converters.convert(image, ( in,out )-> {out.set(in.get()*in.get());}, new FloatType()); 
-		RandomAccessibleInterval< FloatType > sqTem =  Converters.convert(template, ( in,out )-> {out.set(in.get()*in.get());}, new FloatType()); 
+		RandomAccessibleInterval< FloatType > sqTem = Converters.convert(template, ( in,out )-> {out.set(in.get()*in.get());}, new FloatType()); 
 
 		//padded squared images
 		IntervalView< FloatType > padSqImg = Views.interval(Views.extendZero(sqImg),imgIntPad);
@@ -194,37 +194,42 @@ public class GenNormCC {
 		final ImgFactory< ComplexFloatType > factoryComplex = new ArrayImgFactory< ComplexFloatType >(new ComplexFloatType());
 		final ImgFactory< FloatType > factoryFloat = new ArrayImgFactory< FloatType >(new FloatType());
 		
+	
+		final int nThreads = Runtime.getRuntime().availableProcessors();
+		es = Executors.newFixedThreadPool( nThreads );
 		//start with FFT
-		final Img< ComplexFloatType > imageFFT2    =   FFT.realToComplex(padImg, factoryComplex);
-		final Img< ComplexFloatType > templateFFT2 =   FFT.realToComplex(padTem, factoryComplex);
-		final Img< ComplexFloatType > unImageFFT2  =   FFT.realToComplex(padUnitImg, factoryComplex);
-		final Img< ComplexFloatType > unTemplateFFT2 = FFT.realToComplex(padUnitTem, factoryComplex);
-		final Img< ComplexFloatType > sqImageFFT2 =    FFT.realToComplex(padSqImg, factoryComplex);
-		final Img< ComplexFloatType > sqTemplateFFT2 = FFT.realToComplex(padSqTem, factoryComplex);
+		final Img< ComplexFloatType > imageFFT2    =   FFT.realToComplex(padImg, factoryComplex,es);
+		final Img< ComplexFloatType > templateFFT2 =   FFT.realToComplex(padTem, factoryComplex,es);
+		final Img< ComplexFloatType > unImageFFT2  =   FFT.realToComplex(padUnitImg, factoryComplex,es);
+		final Img< ComplexFloatType > unTemplateFFT2 = FFT.realToComplex(padUnitTem, factoryComplex,es);
+		final Img< ComplexFloatType > sqImageFFT2 =    FFT.realToComplex(padSqImg, factoryComplex,es);
+		final Img< ComplexFloatType > sqTemplateFFT2 = FFT.realToComplex(padSqTem, factoryComplex,es);
 		
 		//conjugates
 		FFTMethods.complexConjugate(templateFFT2);	
 		FFTMethods.complexConjugate(unTemplateFFT2);	
 		FFTMethods.complexConjugate(sqTemplateFFT2);	
-		
+		taskExecutor = Parallelization.getTaskExecutor();
+		//System.out.println( taskExecutor.suggestNumberOfTasks());
+			
 		//multiplications
-	    final Img< ComplexFloatType > I1F2F2 = multCompl(unImageFFT2,sqTemplateFFT2);
+		//reuse already allocated arrays
+	    final Img< ComplexFloatType > I1F2F2 = multComplInPlaceSecond(unImageFFT2,sqTemplateFFT2,taskExecutor);
+	    final Img< ComplexFloatType > F1F1I2 = multComplInPlaceSecond(unTemplateFFT2,sqImageFFT2,taskExecutor);
 	    
-		final Img< ComplexFloatType > deNOM = multCompl(unImageFFT2,unTemplateFFT2);
-	    final Img< ComplexFloatType > F1F2 = multCompl(imageFFT2,templateFFT2);
-	    final Img< ComplexFloatType > F1I2 = multCompl(imageFFT2,unTemplateFFT2);
-	    final Img< ComplexFloatType > I1F2 = multCompl(unImageFFT2,templateFFT2);
-	    final Img< ComplexFloatType > F1F1I2 = multCompl(sqImageFFT2,unTemplateFFT2);
-
-	    
+		final Img< ComplexFloatType > deNOM = multCompl(unImageFFT2,unTemplateFFT2,taskExecutor);
+	    final Img< ComplexFloatType > I1F2 = multComplInPlaceSecond(templateFFT2,unImageFFT2,taskExecutor);
+	    final Img< ComplexFloatType > F1I2 = multComplInPlaceSecond(imageFFT2,unTemplateFFT2,taskExecutor);
+		final Img< ComplexFloatType > F1F2 = multComplInPlaceSecond(templateFFT2,imageFFT2,taskExecutor);
+	        
 	    //inverse FFT
-		final Img< FloatType > invdeNOM = FFT.complexToReal(deNOM, factoryFloat, new FloatType());	
-		final Img< FloatType > invF1F2 = FFT.complexToReal(F1F2, factoryFloat, new FloatType());	
-		final Img< FloatType > invF1I2 = FFT.complexToReal(F1I2, factoryFloat, new FloatType());	
-		final Img< FloatType > invI1F2 = FFT.complexToReal(I1F2, factoryFloat, new FloatType());	
-		final Img< FloatType > invF1F1I2 = FFT.complexToReal(F1F1I2, factoryFloat, new FloatType());	
-		final Img< FloatType > invI1F2F2 = FFT.complexToReal(I1F2F2, factoryFloat, new FloatType());
-		
+		final Img< FloatType > invdeNOM = FFT.complexToReal(deNOM, factoryFloat, new FloatType(),es);	
+		final Img< FloatType > invF1F2 = FFT.complexToReal(F1F2, factoryFloat, new FloatType(),es);	
+		final Img< FloatType > invF1I2 = FFT.complexToReal(F1I2, factoryFloat, new FloatType(),es);	
+		final Img< FloatType > invI1F2 = FFT.complexToReal(I1F2, factoryFloat, new FloatType(),es);	
+		final Img< FloatType > invF1F1I2 = FFT.complexToReal(F1F1I2, factoryFloat, new FloatType(),es);	
+		final Img< FloatType > invI1F2F2 = FFT.complexToReal(I1F2F2, factoryFloat, new FloatType(),es);
+		es.shutdown();
 		//ImageJFunctions.show(invdeNOM).setTitle( "denom" );
 		//ImageJFunctions.show(invF1F2).setTitle( "invF1F2" );
 		//ImageJFunctions.show(invF1I2).setTitle( "invF1I2" );
@@ -232,10 +237,12 @@ public class GenNormCC {
 		//ImageJFunctions.show(invF1F1I2).setTitle( "invF1F1I2" );
 		//ImageJFunctions.show(invI1F2F2).setTitle( "invI1F2F2" );
 		
-		calcTermNum(invF1F2,invF1I2,invI1F2,invdeNOM);
-		calcTermDenom(invF1F1I2,invF1I2,invF1I2,invdeNOM);
-		calcTermDenom(invI1F2F2,invI1F2,invI1F2,invdeNOM);
+		calcTermNum(invF1F2,invF1I2,invI1F2,invdeNOM,taskExecutor);
+		calcTermDenom(invF1F1I2,invF1I2,invF1I2,invdeNOM,taskExecutor);
+		calcTermDenom(invI1F2F2,invI1F2,invI1F2,invdeNOM,taskExecutor);
 		
+		
+		taskExecutor.close();
 		//ImageJFunctions.show(invF1F2).setTitle( "term0" );
 		//ImageJFunctions.show(invF1F1I2).setTitle( "term1" );
 		//ImageJFunctions.show(invI1F2F2).setTitle( "term2" );
@@ -395,78 +402,46 @@ public class GenNormCC {
 		return true;
 	}
 	
-	public static void calcTermNum(final Img< FloatType > im1, final Img< FloatType > im2,final Img< FloatType > im3, final Img< FloatType > im4)
+	public static void calcTermNum(final Img< FloatType > im1, final Img< FloatType > im2,final Img< FloatType > im3, final Img< FloatType > im4, final TaskExecutor te)
 	{
-		//final Img< FloatType > numFin =  im1.copy();
-		final Cursor< FloatType > cursFl1 = im1.cursor();
-		final Cursor< FloatType > cursFl2 = im2.cursor();
-		final Cursor< FloatType > cursFl3 = im3.cursor();
-		final Cursor< FloatType > cursFl4 = im4.cursor();
-		float temp;
-		while(cursFl1.hasNext())
-		{
-			cursFl1.fwd();
-			cursFl2.fwd();
-			cursFl3.fwd();
-			cursFl4.fwd();
-			//t4 = Math.max(cursFl4.get().get(),0);
-			//if(Math.abs(t4)>Float.MIN_VALUE)
-			{
-
-				temp=cursFl1.get().get()-(cursFl2.get().get()*cursFl3.get().get()/cursFl4.get().get());
-				cursFl1.get().set(temp);
-
-			}
-		}
 		
-		
-		//return numFin;
+		LoopBuilder.setImages(im1, im2, im3, im4).multiThreaded(te)
+		.forEachPixel(
+				(p1,p2,p3,p4)->
+				{
+					p1.set(p1.getRealFloat()-(p2.getRealFloat()*p3.getRealFloat()/p4.getRealFloat()));
+				}
+				
+				);		
+
 	}
-	public static void calcTermDenom(final Img< FloatType > im1, final Img< FloatType > im2,final Img< FloatType > im3, final Img< FloatType > im4)
+	public static void calcTermDenom(final Img< FloatType > im1, final Img< FloatType > im2,final Img< FloatType > im3, final Img< FloatType > im4, final TaskExecutor te)
 	{
-		//final Img< FloatType > numFin =  im1.copy();
-		final Cursor< FloatType > cursFl1 = im1.cursor();
-		final Cursor< FloatType > cursFl2 = im2.cursor();
-		final Cursor< FloatType > cursFl3 = im3.cursor();
-		final Cursor< FloatType > cursFl4 = im4.cursor();
-		float temp;
-		while(cursFl1.hasNext())
-		{
-			cursFl1.fwd();
-			cursFl2.fwd();
-			cursFl3.fwd();
-			cursFl4.fwd();
-			//t4 = Math.max(cursFl4.get().get(),0);
-			//if(Math.abs(t4)>Float.MIN_VALUE)
-			{
-
-				temp = cursFl1.get().get()-(cursFl2.get().get()*cursFl3.get().get()/cursFl4.get().get());
-				cursFl1.get().set(Math.max(temp, 0));
-
-			}
-		}
 		
-		
-		//return numFin;
+		LoopBuilder.setImages(im1, im2, im3, im4).multiThreaded(te)
+		.forEachPixel(
+				(p1,p2,p3,p4)->
+				{
+					p1.set(Math.max(p1.getRealFloat()-(p2.getRealFloat()*p3.getRealFloat()/p4.getRealFloat()),0));
+				}
+				
+				);	
+
+
 	}
-	public static Img< ComplexFloatType > multCompl(final Img< ComplexFloatType > im1, final Img< ComplexFloatType > im2)
+	public static Img< ComplexFloatType > multCompl(final Img< ComplexFloatType > im1, final Img< ComplexFloatType > im2, final TaskExecutor te)
 	{
 		Img< ComplexFloatType > output = im1.copy();
-		final Cursor< ComplexFloatType > cursOut = output.cursor();
-		final Cursor< ComplexFloatType > cursCompl1 = im1.cursor();
-		final Cursor< ComplexFloatType > cursCompl2 = im2.cursor();
-		final ComplexFloatType cTemp = new ComplexFloatType();
-	    while(cursOut.hasNext())
-	    {
-	    	cursOut.fwd();
-	    	cursCompl1.fwd();
-	    	cursCompl2.fwd();
-	    	cTemp.set(cursCompl1.get());
-	    	cTemp.mul(cursCompl2.get());
-	    	cursOut.get().set(cTemp);
-	    }
+		LoopBuilder.setImages(im2,output).multiThreaded(te).forEachPixel((s,t)->t.mul(s));
 	    
 	    return output;
 	}
+	public static Img< ComplexFloatType > multComplInPlaceSecond(final Img< ComplexFloatType > im1, final Img< ComplexFloatType > im2, final TaskExecutor te)
+	{
+		
 
+		LoopBuilder.setImages(im1,im2).multiThreaded(te).forEachPixel((s,t)->t.mul(s));
+	    
+	    return im2;
+	}
 }

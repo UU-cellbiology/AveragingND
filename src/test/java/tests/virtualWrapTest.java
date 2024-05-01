@@ -16,7 +16,7 @@ public class virtualWrapTest
 	{
 		
 		new ImageJ();
-		ImagePlus imageIn = IJ.openVirtual("/home/eugene/Desktop/projects/UnequalTiffs/BB/001f.tif");
+		ImagePlus imageIn = IJ.openImage("/home/eugene/Desktop/projects/UnequalTiffs/BB/001f.tif");
 		Img< FloatType >img = FloatTiffImgWrap.wrapVirtualFloat(imageIn, MiscUtils.getDimensionsTextImageJ(imageIn));
 		ImageJFunctions.show(img, "test_raw");
 		

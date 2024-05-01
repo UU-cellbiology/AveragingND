@@ -245,7 +245,7 @@ public class RegisterSingleND implements PlugIn, DialogListener
 		//convert to RAI
 		final Img< FloatType > image_in = ImagePlusAdapter.convertFloat(imp1);
 		final Img< FloatType > template_in = ImagePlusAdapter.convertFloat(imp2);
-		GenNormCC normCC = new GenNormCC();
+		MaskedNormCC normCC = new MaskedNormCC();
 		normCC.bZeroMask = bZeroMask;
 		
 		normCC.lim_fractions = lim_fractions;
@@ -256,11 +256,11 @@ public class RegisterSingleND implements PlugIn, DialogListener
 		
 		if(multiCh)
 		{			
-			bNormCCcalc= normCC.caclulateGenNormCC(Views.hyperSlice(image_in, 2, regChannel1), Views.hyperSlice(template_in, 2, regChannel2), bShowCC);//, bRegisterTemplate);
+			bNormCCcalc= normCC.caclulateMaskedNormCC(Views.hyperSlice(image_in, 2, regChannel1), Views.hyperSlice(template_in, 2, regChannel2), bShowCC);//, bRegisterTemplate);
 		}
 		else					
 		{
-			bNormCCcalc = normCC.caclulateGenNormCC(image_in, template_in, bShowCC);//, bRegisterTemplate);	
+			bNormCCcalc = normCC.caclulateMaskedNormCC(image_in, template_in, bShowCC);//, bRegisterTemplate);	
 		}
 		if(!bNormCCcalc)
 		{

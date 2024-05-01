@@ -7,11 +7,9 @@ import net.imglib2.Interval;
 import net.imglib2.RandomAccessibleInterval;
 import net.imglib2.algorithm.fft2.FFT;
 import net.imglib2.algorithm.fft2.FFTMethods;
-import net.imglib2.converter.ComplexPowerFloatConverter;
 import net.imglib2.converter.ComplexPowerGLogFloatConverter;
 import net.imglib2.converter.Converters;
 import net.imglib2.img.Img;
-import net.imglib2.algorithm.gauss.Gauss;
 import net.imglib2.img.ImgFactory;
 import net.imglib2.img.array.ArrayImgFactory;
 import net.imglib2.img.display.imagej.ImageJFunctions;
@@ -21,7 +19,6 @@ import net.imglib2.realtransform.AffineTransform2D;
 import net.imglib2.realtransform.PolarToCartesianTransform2D;
 import net.imglib2.realtransform.RealViews;
 import net.imglib2.realtransform.Scale2D;
-import net.imglib2.realtransform.Scale3D;
 import net.imglib2.type.numeric.complex.ComplexFloatType;
 import net.imglib2.type.numeric.real.FloatType;
 import net.imglib2.view.IntervalView;
@@ -38,7 +35,7 @@ public class RotationCC {
 	 */
 	public boolean caclulateRotationFFTCC(final RandomAccessibleInterval< FloatType > image, final RandomAccessibleInterval< FloatType > template)
 	{
-		int i;
+		//int i;
 		
 		//double [] finData;
 		

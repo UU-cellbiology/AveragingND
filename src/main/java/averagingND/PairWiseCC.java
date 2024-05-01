@@ -229,7 +229,7 @@ public class PairWiseCC implements PlugIn, DialogListener {
 		
 		final int nImageN = imageSet.nImageN;
 		
-		GenNormCC normCC = new GenNormCC();
+		MaskedNormCC normCC = new MaskedNormCC();
 		normCC.bVerbose = false;
 		normCC.bZeroMask = bZeroMask;
 		normCC.lim_fractions = lim_fractions;
@@ -246,7 +246,7 @@ public class PairWiseCC implements PlugIn, DialogListener {
 		{
 			for(j=i+1;j<nImageN;j++)
 			{
-				normCC.caclulateGenNormCC(imageSet.imgs.get(i), imageSet.imgs.get(j), false);
+				normCC.caclulateMaskedNormCC(imageSet.imgs.get(i), imageSet.imgs.get(j), false);
 				ptable.incrementCounter();
 				
 				//ptable.addValue("particle_pair", Integer.toString(i+1)+"_"+Integer.toString(j+1));
