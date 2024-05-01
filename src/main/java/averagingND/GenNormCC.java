@@ -59,9 +59,7 @@ public class GenNormCC {
 	 * the boundaries are always strange **/
 	final double max_fraction_shift = 0.9;	
 	
-	/** 		//ImagePlus imageIn = IJ.openVirtual("/home/eugene/Desktop/projects/UnequalTiffs/BB/001f.tif");
-		//Img< FloatType >img = FloatTiffImgWrap.wrapVirtualFloat(imageIn, MiscUtils.getDimensionsTextImageJ(imageIn));
-		//ImageJFunctions.show(img, "test_raw");
+	/** 		
 	 * @param image
 	 * @param template
 	 */
