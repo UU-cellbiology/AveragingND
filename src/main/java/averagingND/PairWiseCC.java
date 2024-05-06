@@ -29,8 +29,11 @@ public class PairWiseCC implements PlugIn, DialogListener {
 	/** set of images for averaging and information about them **/
 	ImageSet imageSet;
 	
-	public int nConstrainReg = 0;
+	/** parameters dialog **/
+	GenericDialog gdParams;
 	
+	public int nConstrainReg = 0;
+
 	/** choice UI for constrain type **/
 	Choice limitCh;
 
@@ -40,9 +43,18 @@ public class PairWiseCC implements PlugIn, DialogListener {
 	/** values of constrain axes **/
 	TextField [] limVal;
 	
+	double [] lim_fractions = null;
+	
+	FinalInterval limInterval = null;
+	
 	int nDimReg;
 	String sDims;
 	boolean bCenteredLimit = true;
+	
+	final String[] limitsReg = new String[  ] {"No","by voxels", "by image fraction"};
+	DecimalFormatSymbols symbols = new DecimalFormatSymbols();
+
+	DecimalFormat df1;
 	
 	@Override
 	public void run(String arg) {
@@ -52,12 +64,10 @@ public class PairWiseCC implements PlugIn, DialogListener {
 		int d;
 		
 		//double format formatting tool
-		DecimalFormatSymbols symbols = new DecimalFormatSymbols();
 		symbols.setDecimalSeparator('.');
-		//DecimalFormat df = new DecimalFormat ("#.########", symbols);
-		DecimalFormat df1 = new DecimalFormat ("#.#", symbols);
+		df1 = new DecimalFormat ("#.#", symbols);
 		
-		double [] dLimits;
+
 		final String[] sInput = new String[2];
 		sInput[0] = "All currently open images";
 		sInput[1] = "Specify images in a folder";
@@ -99,130 +109,57 @@ public class PairWiseCC implements PlugIn, DialogListener {
 		{
 			nDimReg--; //remove the C component
 		}
-		limName = new Label[nDimReg];
-		limVal = new TextField[nDimReg];
-		dLimits = new double [nDimReg];
 		
-		final String[] limitsReg = new String[  ] {"No","by voxels", "by image fraction"};
-		final GenericDialog gd1 = new GenericDialog( "CC parameters" );
-		if(imageSet.bMultiCh)
+		limName = new Label[nDimReg];
+		
+		limVal = new TextField[nDimReg];	
+
+	    gdParams = new GenericDialog( "CC parameters" );
+		
+	    if(imageSet.bMultiCh)
 		{
 			final String[] channels = new String[ imageSet.nChannels];
 			for ( int c = 0; c < channels.length; ++c )
 				channels[ c ] = "use channel " + Integer.toString(c+1);
-			gd1.addChoice( "For calculations ", channels, channels[ 0 ] );
+			gdParams.addChoice( "For calculations ", channels, channels[ 0 ] );
 		}
 		
-		gd1.addCheckbox("Use zero masked CC?", Prefs.get("RegisterNDFFT.PW.bExcludeZeros", false));	
+		gdParams.addCheckbox("Use zero masked CC?", Prefs.get("RegisterNDFFT.PW.bExcludeZeros", false));	
 		String sCurrChoice = Prefs.get("RegisterNDFFT.PW.sConstrain", "No");
-		gd1.addChoice("Constrain registration?", limitsReg, sCurrChoice);
-		limitCh = (Choice) gd1.getChoices().lastElement();
+		gdParams.addChoice("Constrain registration?", limitsReg, sCurrChoice);
+		limitCh = (Choice) gdParams.getChoices().lastElement();
 		for (d=0;d<nDimReg;d++)
 		{
 			switch (sCurrChoice)
 			{
 				case "No":
-					gd1.addNumericField("No max "+sDims.charAt(d)+" limit", 0.0, 3);
+					gdParams.addNumericField("No max "+sDims.charAt(d)+" limit", 0.0, 3);
 					break;
 				case "by voxels":
-					gd1.addNumericField(sDims.charAt(d)+" limit (px)", Prefs.get("RegisterNDFFT.PW.dMax"+sDims.charAt(d)+"px", 10.0), 3);
+					gdParams.addNumericField(sDims.charAt(d)+" limit (px)", Prefs.get("RegisterNDFFT.PW.dMax"+sDims.charAt(d)+"px", 10.0), 3);
 					break;
 				case "by image fraction":
-					gd1.addNumericField(sDims.charAt(d)+" limit (0-1)", Prefs.get("RegisterNDFFT.PW.dMax"+sDims.charAt(d)+"fr", 0.5), 3);
+					gdParams.addNumericField(sDims.charAt(d)+" limit (0-1)", Prefs.get("RegisterNDFFT.PW.dMax"+sDims.charAt(d)+"fr", 0.5), 3);
 					break;
 					
 			}
-			limName[d] = gd1.getLabel();
-			limVal[d] = (TextField)gd1.getNumericFields().get(d);	
+			limName[d] = gdParams.getLabel();
+			limVal[d] = (TextField)gdParams.getNumericFields().get(d);	
 			if(sCurrChoice.equals("No"))
 			{
 				limVal[d].setEnabled(false);
 			}
 		}
 		
-		gd1.addCheckbox("Image centered constrains?", Prefs.get("RegisterNDFFT.PW.bCenteredLimit", false));
+		gdParams.addCheckbox("Image centered constrains?", Prefs.get("RegisterNDFFT.PW.bCenteredLimit", false));
 
-		gd1.addDialogListener(this);
-		gd1.showDialog();
+		gdParams.addDialogListener(this);
+		gdParams.showDialog();
 		
-		if ( gd1.wasCanceled() )
+		if ( gdParams.wasCanceled() )
 			return;
 
-		
-		if(imageSet.bMultiCh)
-		{
-			imageSet.alignChannel = gd1.getNextChoiceIndex();
-		}
-
-		bZeroMask  = gd1.getNextBoolean();
-		Prefs.set("RegisterNDFFT.PW.bExcludeZeros", bZeroMask);
-		
-		nConstrainReg = gd1.getNextChoiceIndex();
-		Prefs.set("RegisterNDFFT.PW.sConstrain", limitsReg[nConstrainReg]);
-
-		
-		bCenteredLimit  = gd1.getNextBoolean();
-		Prefs.set("RegisterNDFFT.PW.bCenteredLimit", bCenteredLimit);
-
-		if(nConstrainReg==0)
-		{
-			IJ.log("Pairwise CC without constrains.");
-		}
-		else		
-		{
-			if(nConstrainReg == 1)
-			{
-				IJ.log("Pairwice CC with constrain specified in voxels:");
-				
-				for(d=0;d<nDimReg;d++)
-				{
-					dLimits[d]=Math.abs(gd1.getNextNumber());
-					Prefs.set("RegisterNDFFT.PW.dMax"+sDims.charAt(d)+"px",dLimits[d]);
-					IJ.log("Axis " +sDims.charAt(d)+": "+df1.format(dLimits[d])+" pixels");
-				}
-				
-			}
-			else
-			{
-				IJ.log("Averaging with constrain specified as a fraction of max displacement:");
-				for(d=0;d<nDimReg;d++)
-				{
-					dLimits[d]=Math.min(Math.abs(gd1.getNextNumber()), 1.0);
-					Prefs.set("RegisterNDFFT.PW.dMax"+sDims.charAt(d)+"fr",dLimits[d]);
-					IJ.log("Axis " +sDims.charAt(d)+": "+df1.format(dLimits[d]));
-				}
-			}
-			if(bCenteredLimit)
-			{
-				IJ.log("Constrains applied with respect to centered position.");
-			}
-			else
-			{
-				IJ.log("Constrains applied with respect to the coordinates origin (Zero, top-left).");
-			}
-		}
-		
-		double [] lim_fractions = null;
-		FinalInterval limInterval = null;
-		if(nConstrainReg == 1)
-		{
-			long[] minI = new long [nDimReg];
-			long[] maxI = new long [nDimReg];
-			for(d=0;d<nDimReg;d++)
-			{
-				maxI[d] = (long) dLimits[d];
-				minI[d] = (long) ((-1.0)*dLimits[d]);
-			}
-			limInterval = new FinalInterval(minI, maxI);
-		}
-		if(nConstrainReg == 2)
-		{
-			lim_fractions = new double [nDimReg];
-			for(d=0;d<nDimReg;d++)
-			{
-				lim_fractions[d] = dLimits[d];
-			}
-		}
+	
 		
 		if(!imageSet.loadAllImages())
 			return;
@@ -280,9 +217,6 @@ public class PairWiseCC implements PlugIn, DialogListener {
 		
 		if(e!=null)
 		{
-			DecimalFormatSymbols symbols = new DecimalFormatSymbols();
-			symbols.setDecimalSeparator('.');
-			DecimalFormat df1 = new DecimalFormat ("#.##", symbols);
 
 			if(e.getSource()==limitCh)
 			{
@@ -315,7 +249,94 @@ public class PairWiseCC implements PlugIn, DialogListener {
 				}
 			}
 		}
+		//read/set parameters to allow macro recording
+		if(gdParams.wasOKed())
+		{
+			readDialogParameters();
+		}	
+		
 		return true;
+	}
+
+	void readDialogParameters()
+	{
+		int d;
+		final double [] dLimits = new double [nDimReg];
+		
+		if(imageSet.bMultiCh)
+		{
+			imageSet.alignChannel = gdParams.getNextChoiceIndex();
+		}
+
+		bZeroMask  = gdParams.getNextBoolean();
+		Prefs.set("RegisterNDFFT.PW.bExcludeZeros", bZeroMask);
+		
+		nConstrainReg = gdParams.getNextChoiceIndex();
+		Prefs.set("RegisterNDFFT.PW.sConstrain", limitsReg[nConstrainReg]);
+
+		
+		bCenteredLimit  = gdParams.getNextBoolean();
+		Prefs.set("RegisterNDFFT.PW.bCenteredLimit", bCenteredLimit);
+
+		if(nConstrainReg==0)
+		{
+			IJ.log("Pairwise CC without constrains.");
+		}
+		else		
+		{
+			if(nConstrainReg == 1)
+			{
+				IJ.log("Pairwice CC with constrain specified in voxels:");
+				
+				for(d=0;d<nDimReg;d++)
+				{
+					dLimits[d]=Math.abs(gdParams.getNextNumber());
+					Prefs.set("RegisterNDFFT.PW.dMax"+sDims.charAt(d)+"px",dLimits[d]);
+					IJ.log("Axis " +sDims.charAt(d)+": "+df1.format(dLimits[d])+" pixels");
+				}
+				
+			}
+			else
+			{
+				IJ.log("Averaging with constrain specified as a fraction of max displacement:");
+				for(d=0;d<nDimReg;d++)
+				{
+					dLimits[d]=Math.min(Math.abs(gdParams.getNextNumber()), 1.0);
+					Prefs.set("RegisterNDFFT.PW.dMax"+sDims.charAt(d)+"fr",dLimits[d]);
+					IJ.log("Axis " +sDims.charAt(d)+": "+ df1.format(dLimits[d]));
+				} 
+			}
+			if(bCenteredLimit)
+			{
+				IJ.log("Constrains applied with respect to centered position.");
+			}
+			else
+			{
+				IJ.log("Constrains applied with respect to the coordinates origin (Zero, top-left).");
+			}
+		}
+		
+		lim_fractions = null;
+		limInterval = null;
+		if(nConstrainReg == 1)
+		{
+			long[] minI = new long [nDimReg];
+			long[] maxI = new long [nDimReg];
+			for(d=0;d<nDimReg;d++)
+			{
+				maxI[d] = (long) dLimits[d];
+				minI[d] = (long) ((-1.0)*dLimits[d]);
+			}
+			limInterval = new FinalInterval(minI, maxI);
+		}
+		if(nConstrainReg == 2)
+		{
+			lim_fractions = new double [nDimReg];
+			for(d=0;d<nDimReg;d++)
+			{
+				lim_fractions[d] = dLimits[d];
+			}
+		}
 	}
 	
 	public static void main( final String[] args )

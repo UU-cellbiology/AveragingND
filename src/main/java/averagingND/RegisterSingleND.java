@@ -46,6 +46,11 @@ public class RegisterSingleND implements PlugIn, DialogListener
 	public int regChannel1 = 0;
 	public int regChannel2 = 0;
 	public boolean multiCh = false;
+	
+	
+	/** parameters dialog **/
+	GenericDialog gdParams;
+	
 	public boolean bZeroMask = false;
 	public int nConstrainReg = 0;
 	
@@ -58,16 +63,21 @@ public class RegisterSingleND implements PlugIn, DialogListener
 	/** values of constrain axes **/
 	TextField [] limVal;
 	
+	double [] lim_fractions = null;
+	
+	FinalInterval limInterval = null;
+	
 	int nDimReg;
 	String sDims;
 	boolean bCenteredLimit = false;
+	final String[] limitsReg = new String[  ] {"No","by voxels", "by image fraction"};
 
 	@Override
 	public void run(String arg) {
 		
 		int d;
 		
-		double [] dLimits;
+
 
 		//this part is honestly stolen from "Pairwise Stitching" plugin
 		//https://github.com/fiji/Stitching/blob/master/src/main/java/plugin/Stitching_Pairwise.java
@@ -147,100 +157,46 @@ public class RegisterSingleND implements PlugIn, DialogListener
 			nDimReg--; //remove the C component
 		}
 		limName = new Label[nDimReg];
-		limVal = new TextField[nDimReg];
-		dLimits = new double [nDimReg];
+		limVal = new TextField[nDimReg];	
 		
-		final String[] limitsReg = new String[  ] {"No","by voxels", "by image fraction"};
-		final GenericDialog gd1 = new GenericDialog( "Registration parameters" );	
-		gd1.addCheckbox("Use zero masked CC?", Prefs.get("RegisterNDFFT.bExcludeZeros", false));		
-		gd1.addCheckbox("Show cross-correlation?", Prefs.get("RegisterNDFFT.bShowCC", false));
-		gd1.addCheckbox("Register template?", Prefs.get("RegisterNDFFT.bRegisterTemplate", false));
+		gdParams = new GenericDialog( "Registration parameters" );	
+		gdParams.addCheckbox("Use zero masked CC?", Prefs.get("RegisterNDFFT.bExcludeZeros", false));		
+		gdParams.addCheckbox("Show cross-correlation?", Prefs.get("RegisterNDFFT.bShowCC", false));
+		gdParams.addCheckbox("Register template?", Prefs.get("RegisterNDFFT.bRegisterTemplate", false));
 		String sCurrChoice = Prefs.get("RegisterNDFFT.sConstrain", "No");
-		gd1.addChoice("Constrain registration?", limitsReg, sCurrChoice);
-		limitCh = (Choice) gd1.getChoices().lastElement();
+		gdParams.addChoice("Constrain registration?", limitsReg, sCurrChoice);
+		limitCh = (Choice) gdParams.getChoices().lastElement();
 		
 		for (d=0;d<nDimReg;d++)
 		{
 			switch (sCurrChoice)
 			{
 				case "No":
-					gd1.addNumericField("No max "+sDims.charAt(d)+" limit", 0.0, 3);
+					gdParams.addNumericField("No max "+sDims.charAt(d)+" limit", 0.0, 3);
 					break;
 				case "by voxels":
-					gd1.addNumericField(sDims.charAt(d)+" limit (px)", Prefs.get("RegisterNDFFT.dMax"+sDims.charAt(d)+"px", 10.0), 3);
+					gdParams.addNumericField(sDims.charAt(d)+" limit (px)", Prefs.get("RegisterNDFFT.dMax"+sDims.charAt(d)+"px", 10.0), 3);
 					break;
 				case "by image fraction":
-					gd1.addNumericField(sDims.charAt(d)+" limit (0-1)", Prefs.get("RegisterNDFFT.dMax"+sDims.charAt(d)+"fr", 0.5), 3);
+					gdParams.addNumericField(sDims.charAt(d)+" limit (0-1)", Prefs.get("RegisterNDFFT.dMax"+sDims.charAt(d)+"fr", 0.5), 3);
 					break;
 					
 			}
-			limName[d] = gd1.getLabel();
-			limVal[d] = (TextField)gd1.getNumericFields().get(d);	
+			limName[d] = gdParams.getLabel();
+			limVal[d] = (TextField)gdParams.getNumericFields().get(d);	
 			if(sCurrChoice.equals("No"))
 			{
 				limVal[d].setEnabled(false);
 			}
 		}
-		gd1.addCheckbox("Image centered constrains?", Prefs.get("RegisterNDFFT.bCenteredLimit", false));
+		gdParams.addCheckbox("Image centered constrains?", Prefs.get("RegisterNDFFT.bCenteredLimit", false));
 
-		gd1.addDialogListener(this);
-		gd1.showDialog();
+		gdParams.addDialogListener(this);
+		gdParams.showDialog();
 		
-		if ( gd1.wasCanceled() )
+		if ( gdParams.wasCanceled() )
 			return;
 		
-		bZeroMask  = gd1.getNextBoolean();
-		Prefs.set("RegisterNDFFT.bExcludeZeros", bZeroMask);
-		bShowCC  = gd1.getNextBoolean();
-		Prefs.set("RegisterNDFFT.bShowCC", bShowCC);
-		bRegisterTemplate  = gd1.getNextBoolean();
-		Prefs.set("RegisterNDFFT.bRegisterTemplate", bRegisterTemplate);
-		nConstrainReg = gd1.getNextChoiceIndex();
-		Prefs.set("RegisterNDFFT.sConstrain", limitsReg[nConstrainReg]);
-		if(nConstrainReg!=0)
-		{
-			if(nConstrainReg == 1)
-			{
-				for(d=0;d<nDimReg;d++)
-				{
-					dLimits[d]=Math.abs(gd1.getNextNumber());
-					Prefs.set("RegisterNDFFT.dMax"+sDims.charAt(d)+"px",dLimits[d]);
-				}
-				
-			}
-			else
-			{
-				for(d=0;d<nDimReg;d++)
-				{
-					dLimits[d]=Math.min(Math.abs(gd1.getNextNumber()), 1.0);
-					Prefs.set("RegisterNDFFT.dMax"+sDims.charAt(d)+"fr",dLimits[d]);
-				}
-			}
-		}
-		bCenteredLimit  = gd1.getNextBoolean();
-		Prefs.set("RegisterNDFFT.bCenteredLimit", bCenteredLimit);
-		
-		double [] lim_fractions = null;
-		FinalInterval limInterval = null;
-		if(nConstrainReg == 1)
-		{
-			long[] minI = new long [nDimReg];
-			long[] maxI = new long [nDimReg];
-			for(d=0;d<nDimReg;d++)
-			{
-				maxI[d] = (long) dLimits[d];
-				minI[d] = (long) ((-1.0)*dLimits[d]);
-			}
-			limInterval = new FinalInterval(minI, maxI);
-		}
-		if(nConstrainReg == 2)
-		{
-			lim_fractions = new double [nDimReg];
-			for(d=0;d<nDimReg;d++)
-			{
-				lim_fractions[d] = dLimits[d];
-			}
-		}
 		
 		//convert to RAI
 		final Img< FloatType > image_in = ImagePlusAdapter.convertFloat(imp1);
@@ -354,9 +310,72 @@ public class RegisterSingleND implements PlugIn, DialogListener
 				}
 			}
 		}
+		//read/set parameters to allow macro recording
+		if(gdParams.wasOKed())
+		{
+			readDialogParameters();
+		}	
 		return true;
 	}
-
+	void readDialogParameters()
+	{
+		int d;
+		
+		final double [] dLimits = new double [nDimReg];
+		
+		bZeroMask  = gdParams.getNextBoolean();
+		Prefs.set("RegisterNDFFT.bExcludeZeros", bZeroMask);
+		bShowCC  = gdParams.getNextBoolean();
+		Prefs.set("RegisterNDFFT.bShowCC", bShowCC);
+		bRegisterTemplate  = gdParams.getNextBoolean();
+		Prefs.set("RegisterNDFFT.bRegisterTemplate", bRegisterTemplate);
+		nConstrainReg = gdParams.getNextChoiceIndex();
+		Prefs.set("RegisterNDFFT.sConstrain", limitsReg[nConstrainReg]);
+		if(nConstrainReg!=0)
+		{
+			if(nConstrainReg == 1)
+			{
+				for(d=0;d<nDimReg;d++)
+				{
+					dLimits[d]=Math.abs(gdParams.getNextNumber());
+					Prefs.set("RegisterNDFFT.dMax"+sDims.charAt(d)+"px",dLimits[d]);
+				}
+				
+			}
+			else
+			{
+				for(d=0;d<nDimReg;d++)
+				{
+					dLimits[d]=Math.min(Math.abs(gdParams.getNextNumber()), 1.0);
+					Prefs.set("RegisterNDFFT.dMax"+sDims.charAt(d)+"fr",dLimits[d]);
+				}
+			}
+		}
+		bCenteredLimit  = gdParams.getNextBoolean();
+		Prefs.set("RegisterNDFFT.bCenteredLimit", bCenteredLimit);
+		
+		lim_fractions = null;
+		limInterval = null;
+		if(nConstrainReg == 1)
+		{
+			long[] minI = new long [nDimReg];
+			long[] maxI = new long [nDimReg];
+			for(d=0;d<nDimReg;d++)
+			{
+				maxI[d] = (long) dLimits[d];
+				minI[d] = (long) ((-1.0)*dLimits[d]);
+			}
+			limInterval = new FinalInterval(minI, maxI);
+		}
+		if(nConstrainReg == 2)
+		{
+			lim_fractions = new double [nDimReg];
+			for(d=0;d<nDimReg;d++)
+			{
+				lim_fractions[d] = dLimits[d];
+			}
+		}
+	}
 	public static void main( final String[] args ) throws ImgIOException, IncompatibleTypeException
 	{
 		// open an ImageJ window

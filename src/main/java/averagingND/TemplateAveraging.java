@@ -18,7 +18,7 @@ public class TemplateAveraging {
 	 * In case of average, contains a sum of all pixels,
 	 * in case of median - three imgs around the median
 	 * in case of masked average - sum and count per pixel **/
-	public ArrayList<IntervalView<FloatType>> current_stat = new ArrayList<IntervalView<FloatType>>();
+	public ArrayList<IntervalView<FloatType>> current_stat = new ArrayList<>();
 	
 	
 	public IntervalView<FloatType> currentTemplate = null;
@@ -175,14 +175,14 @@ public class TemplateAveraging {
 
 		final FinalInterval outUnionInterval = getUnionIntervalFromArray(imgs);
 		
-		final ArrayList<IntervalView< FloatType >> interv = new ArrayList<IntervalView< FloatType >>();
+		final ArrayList<IntervalView< FloatType >> interv = new ArrayList<>();
 		
 		for(i=0;i<imgs.size();i++)
 		{
 			interv.add(Views.interval( Views.extendZero(imgs.get(i)),outUnionInterval));
 		}
 		
-		ArrayList<Cursor< FloatType >> cursors = new ArrayList<Cursor< FloatType >>();
+		ArrayList<Cursor< FloatType >> cursors = new ArrayList<>();
 		for(i=0;i<interv.size();i++)
 		{
 			cursors.add(interv.get(i).cursor());
@@ -231,14 +231,14 @@ public class TemplateAveraging {
 		final FinalInterval outUnionInterval = getUnionIntervalFromArray(imgs);
 		
 		
-		ArrayList<IntervalView< FloatType >> interv = new ArrayList<IntervalView< FloatType >>();
+		ArrayList<IntervalView< FloatType >> interv = new ArrayList<>();
 		
 		for(i=0;i<imgs.size();i++)
 		{
 			interv.add(Views.interval( Views.extendZero(imgs.get(i)),outUnionInterval));
 		}
 		
-		ArrayList<Cursor< FloatType >> cursors = new ArrayList<Cursor< FloatType >>();
+		ArrayList<Cursor< FloatType >> cursors = new ArrayList<>();
 		for(i=0;i<interv.size();i++)
 		{
 			cursors.add(interv.get(i).cursor());
@@ -267,7 +267,7 @@ public class TemplateAveraging {
 			nSumVal = 0;
 			for(i=0;i<cursors.size();i++)
 			{
-				imgC=cursors.get(i);
+				imgC = cursors.get(i);
 				imgC.fwd();
 				nValCur=imgC.get().get();
 				if(nValCur > 0.0000001)
@@ -279,7 +279,7 @@ public class TemplateAveraging {
 			if(nNumVal > 0)
 			{
 				sumC.get().set((float)nSumVal);
-				cntC.get().set((float)nNumVal);
+				cntC.get().set(nNumVal);
 			}
 		}
 

@@ -23,8 +23,6 @@ import ij.plugin.PlugIn;
 
 import net.imglib2.FinalInterval;
 import net.imglib2.RandomAccessibleInterval;
-import net.imglib2.type.NativeType;
-import net.imglib2.type.numeric.RealType;
 import net.imglib2.type.numeric.real.FloatType;
 import net.imglib2.view.IntervalView;
 import net.imglib2.view.Views;
@@ -59,18 +57,21 @@ public class IterativeAveraging implements PlugIn, DialogListener {
 	public int nIterN = 0;
 
 	/** whether or not generate intermediate average **/
-	boolean bSaveIntermediate = false;
+	boolean bSaveIntermediate = true;
 	
 	String sPathGeneralOutput = "";
 	
 	String sPathIntermediate = "";
 
 	/** whether to use zero masked CC **/
-	public boolean bZeroMask = false;
+	public boolean bZeroMask = true;
 	
-	public boolean bOutputInput = false;
+	public boolean bOutputInput = true;
 	
 	String sPathRegistered = "";
+	
+	/** parameters dialog **/
+	GenericDialog gdParams;
 	
 	/** whether to use simple average or zero masked **/
 	public boolean bIgnoreZeroInAveraging = true;
@@ -111,8 +112,17 @@ public class IterativeAveraging implements PlugIn, DialogListener {
 	
 	boolean bLoadCached = false;
 	
+	final String[] sIniTemplate = new String[ ]{"Centered","Zero (top-left)"};
+	final String[] sAveragingAim = new String[ ]{"Average","Zero masked average"}; //"Median",
+	final String[] limitsReg = new String[  ] {"No","by voxels", "by image fraction"};
+	
+	DecimalFormatSymbols symbols = new DecimalFormatSymbols();
+	
+	DecimalFormat df1;
+	
 	@Override
-	public void run(String paramString) {
+	public void run(String paramString) 
+	{
 	
 		int i,j,k, iter;
 		int d;
@@ -120,10 +130,9 @@ public class IterativeAveraging implements PlugIn, DialogListener {
 		ArrayList<RandomAccessibleInterval< FloatType >> imgs_avrg_out;
 		
 		//double format formatting tool
-		DecimalFormatSymbols symbols = new DecimalFormatSymbols();
 		symbols.setDecimalSeparator('.');
 		DecimalFormat df = new DecimalFormat ("#.########", symbols);
-		DecimalFormat df1 = new DecimalFormat ("#.#", symbols);
+		df1 = new DecimalFormat ("#.#", symbols);
 		
 		final String[] sInput = new String[3];
 		sInput[0] = "All currently open images";
@@ -145,8 +154,8 @@ public class IterativeAveraging implements PlugIn, DialogListener {
 		imageSet = new ImageSet();
 		
 		//init arrays			
-		imgs_shift = new ArrayList<RandomAccessibleInterval< FloatType >>();
-		shifts = new ArrayList<long []>();
+		imgs_shift = new ArrayList<>();
+		shifts = new ArrayList<>();
 		imageSet.nSource = nInputType;
 		
 		if(nInputType == ImageSet.OPENED)
@@ -166,7 +175,7 @@ public class IterativeAveraging implements PlugIn, DialogListener {
 				IJ.log("Using cached reading of images.");				
 			}
 
-			DirectoryChooser dc = new DirectoryChooser ( "Choose a folder with images.." );
+			DirectoryChooser dc = new DirectoryChooser ( "Select a folder with images.." );
 			String sPath = dc.getDirectory();
 			if(!imageSet.initializeFromDisk(sPath, ".tif"))
 				return;
@@ -231,7 +240,7 @@ public class IterativeAveraging implements PlugIn, DialogListener {
 		double maxAverCC = (-1)*Double.MAX_VALUE;
 		//final int dimShift = imageSet.imgs.get(0).numDimensions(); 
 		int nIterMax = 0;
-		ArrayList<long []> maxAverCCshifts = new ArrayList<long []>();
+		ArrayList<long []> maxAverCCshifts = new ArrayList<>();
 		
 		for(i=0;i<nImageN;i++)
 		{
@@ -387,7 +396,7 @@ public class IterativeAveraging implements PlugIn, DialogListener {
 		
 		//calculate final average image		
 		IJ.log("calculating final average image..");		
-		imgs_avrg_out = getAlignedRAIs(shifts, true); 
+		imgs_avrg_out = getAlignedRAIs(shifts); 
 		IntervalView<FloatType> finalAver = FinalOutput.averageArray(imgs_avrg_out, bIgnoreZeroInAveraging);
 		String sOutFinalName = "";
 		switch(nAveragingAim)
@@ -433,20 +442,20 @@ public class IterativeAveraging implements PlugIn, DialogListener {
 	/** function calculating multi-channel shifts from imgs_multiCh given shifts 
 	 * **/
 	
-	ArrayList<RandomAccessibleInterval< FloatType >> getMultiChAligned(final ArrayList<long []> shifts)//, String sTitle, Calibration cal)
+	ArrayList<RandomAccessibleInterval< FloatType >> getMultiChAligned(final ArrayList<long []> shifts_)//, String sTitle, Calibration cal)
 	{
 		final int nDim =  imageSet.imgs_multiCh.get(0).numDimensions();
 		long [] curr_shift = new long [nDim];		
 		
-		final ArrayList<RandomAccessibleInterval< FloatType >> imgs_multiCh_reg = new ArrayList<RandomAccessibleInterval< FloatType >>(); 
+		final ArrayList<RandomAccessibleInterval< FloatType >> imgs_multiCh_reg = new ArrayList<>(); 
 		
-		for(int iImCount=0; iImCount<shifts.size(); iImCount++)
+		for(int iImCount=0; iImCount<shifts_.size(); iImCount++)
 		{
 			//"jumping" over color channel, since it is xyczt and our shift is xyz			
 			int j=0;
 			for (int i=0;i<nDim;i++)
 			{
-				curr_shift[i]=shifts.get(iImCount)[j];
+				curr_shift[i]=shifts_.get(iImCount)[j];
 				if(i==1)
 				{
 					curr_shift[2]=0;
@@ -461,23 +470,23 @@ public class IterativeAveraging implements PlugIn, DialogListener {
 	
 	
 	/** given input image array imgs_in and shifts, generates corresponding array of applied shifted interval views imgs_out **/
-	public double buildShiftedIntervals(final ArrayList<RandomAccessibleInterval< FloatType >> imgs_in, final ArrayList<RandomAccessibleInterval< FloatType >> imgs_out, final ArrayList<long []> shifts)
+	public static double buildShiftedIntervals(final ArrayList<RandomAccessibleInterval< FloatType >> imgs_in, final ArrayList<RandomAccessibleInterval< FloatType >> imgs_out, final ArrayList<long []> shifts_)
 	{
 		// calculate new displacements
 		double cumShift=0.0;
 		double nCurrShift = 0.0;
 		int i,j;
-		int nDim = shifts.get(0).length;
+		int nDim = shifts_.get(0).length;
 		imgs_out.clear();
 		for(i=0;i<imgs_in.size();i++)
 		{
-			imgs_out.add(i,Views.translate(imgs_in.get(i),shifts.get(i)));
+			imgs_out.add(i,Views.translate(imgs_in.get(i),shifts_.get(i)));
 			
 			//estimate total displacement
 			nCurrShift = 0.0;
 			for(j=0;j<nDim;j++)
 			{
-				nCurrShift += shifts.get(i)[j]*shifts.get(i)[j];
+				nCurrShift += shifts_.get(i)[j]*shifts_.get(i)[j];
 			}
 			cumShift+=Math.sqrt(nCurrShift);
 		}
@@ -486,13 +495,13 @@ public class IterativeAveraging implements PlugIn, DialogListener {
 	
 	/** function generates shifts so all images are centered (+/- one pixel) if nMethod ==0 
 	 * and just zero values if nMethod == 1 **/
-	public ArrayList<long []> initShifts(final ArrayList<RandomAccessibleInterval< FloatType >> imgs_in, int nMethod)
+	public static ArrayList<long []> initShifts(final ArrayList<RandomAccessibleInterval< FloatType >> imgs_in, int nMethod)
 	{
 		int nDim = imgs_in.get(0).numDimensions();
 		long [] currSize = imgs_in.get(0).dimensionsAsLongArray();
 		long [] currMin = imgs_in.get(0).minAsLongArray();
 		long [] currShift; 
-		ArrayList<long []> shifts = new ArrayList<long []> ();		
+		ArrayList<long []> shifts_ = new ArrayList<> ();		
 		int i,j;
 		int nDisp;
 		for (i=0;i<imgs_in.size();i++)
@@ -509,10 +518,10 @@ public class IterativeAveraging implements PlugIn, DialogListener {
 						currShift[j] = nDisp-currMin[j];
 					}
 				}
-				shifts.add(currShift);
+				shifts_.add(currShift);
 
 		}		
-		return shifts;
+		return shifts_;
 	}
 	
 	public void medianCorrectShifts(final long [][] shifts_in)
@@ -544,7 +553,7 @@ public class IterativeAveraging implements PlugIn, DialogListener {
 	
 	public void processIntermediate(final int nIt)
 	{
-		ArrayList<RandomAccessibleInterval< FloatType >> imgs_avrg_out = getAlignedRAIs(shifts, true); 
+		ArrayList<RandomAccessibleInterval< FloatType >> imgs_avrg_out = getAlignedRAIs(shifts); 
 		String sName =""; 
 		
 		switch(nAveragingAim)
@@ -577,11 +586,6 @@ public class IterativeAveraging implements PlugIn, DialogListener {
 	{
 		int d;
 		
-		//double format formatting tool
-		final DecimalFormatSymbols symbols = new DecimalFormatSymbols();
-		symbols.setDecimalSeparator('.');
-		final DecimalFormat df1 = new DecimalFormat ("#.#", symbols);
-		
 		sDims = imageSet.sRefDims;
 		
 		nDimReg = sDims.length();
@@ -593,77 +597,268 @@ public class IterativeAveraging implements PlugIn, DialogListener {
 		
 		limName = new Label[nDimReg];
 		limVal = new TextField[nDimReg];
-		double [] dLimits = new double [nDimReg];
 		
-		final String[] sIniTemplate = new String[ ]{"Centered","Zero (top-left)"};
-		final String[] sAveragingAim = new String[ ]{"Average","Zero masked average"}; //"Median",
-		final String[] limitsReg = new String[  ] {"No","by voxels", "by image fraction"};
-		final GenericDialog gd1 = new GenericDialog( "Averaging parameters" );
+		
+
+		gdParams = new GenericDialog( "Averaging parameters" );
 		if(imageSet.bMultiCh)
 		{
 			final String[] channels = new String[ imageSet.nChannels];
 			for ( int c = 0; c < channels.length; ++c )
 				channels[ c ] = "use channel " + Integer.toString(c+1);
-			gd1.addChoice( "For alignment", channels, channels[ 0 ] );
+			gdParams.addChoice( "For alignment", channels, channels[ 0 ] );
 		}
-		gd1.addChoice( "Initial template:", sIniTemplate, Prefs.get("RegisterNDFFT.IA.nIniTemplate", sIniTemplate[0]) );
-		gd1.addNumericField("Number of iterations", Prefs.get("RegisterNDFFT.IA.nIterN",10),0);
-		gd1.addChoice( "Template calculation:", sAveragingAim, Prefs.get("RegisterNDFFT.IA.nAveragingAim", sAveragingAim[0]) );
-		gd1.addCheckbox("Use zero masked CC?", Prefs.get("RegisterNDFFT.IA.bExcludeZeros", false));		
+		gdParams.addChoice( "Initial template:", sIniTemplate, Prefs.get("RegisterNDFFT.IA.nIniTemplate", sIniTemplate[0]) );
+		gdParams.addNumericField("Number of iterations", Prefs.get("RegisterNDFFT.IA.nIterN",10),0);
+		gdParams.addChoice( "Template calculation:", sAveragingAim, Prefs.get("RegisterNDFFT.IA.nAveragingAim", sAveragingAim[0]) );
+		gdParams.addCheckbox("Use zero masked CC?", Prefs.get("RegisterNDFFT.IA.bExcludeZeros", true));		
 		String sCurrChoice = Prefs.get("RegisterNDFFT.IA.sConstrain", "No");
-		gd1.addChoice("Constrain registration?", limitsReg, sCurrChoice);
-		limitCh = (Choice) gd1.getChoices().lastElement();
+		gdParams.addChoice("Constrain registration?", limitsReg, sCurrChoice);
+		limitCh = (Choice) gdParams.getChoices().lastElement();
 		for (d=0;d<nDimReg;d++)
 		{
 			switch (sCurrChoice)
 			{
 				case "No":
-					gd1.addNumericField("No max "+sDims.charAt(d)+" limit", 0.0, 3);
+					gdParams.addNumericField("No max "+sDims.charAt(d)+" limit", 0.0, 3);
 					break;
 				case "by voxels":
-					gd1.addNumericField(sDims.charAt(d)+" limit (px)", Prefs.get("RegisterNDFFT.IA.dMax"+sDims.charAt(d)+"px", 10.0), 3);
+					gdParams.addNumericField(sDims.charAt(d)+" limit (px)", Prefs.get("RegisterNDFFT.IA.dMax"+sDims.charAt(d)+"px", 10.0), 3);
 					break;
 				case "by image fraction":
-					gd1.addNumericField(sDims.charAt(d)+" limit (0-1)", Prefs.get("RegisterNDFFT.IA.dMax"+sDims.charAt(d)+"fr", 0.5), 3);
+					gdParams.addNumericField(sDims.charAt(d)+" limit (0-1)", Prefs.get("RegisterNDFFT.IA.dMax"+sDims.charAt(d)+"fr", 0.5), 3);
 					break;
 					
 			}
-			limName[d] = gd1.getLabel();
-			limVal[d] = (TextField)gd1.getNumericFields().get(d+1);	
+			limName[d] = gdParams.getLabel();
+			limVal[d] = (TextField)gdParams.getNumericFields().get(d+1);	
 			if(sCurrChoice.equals("No"))
 			{
 				limVal[d].setEnabled(false);
 			}
 		}
-		gd1.addMessage("Output:");
-		gd1.addCheckbox("Save intermediates?", Prefs.get("RegisterNDFFT.IA.bSaveIntermediate",false));
-		gd1.addCheckbox("Save registered inputs?", Prefs.get("RegisterNDFFT.IA.bOutputInput",false));
-		gd1.addCheckbox("Save SD image?", Prefs.get("RegisterNDFFT.IA.bShowSD",false));
+		gdParams.addMessage("Output:");
+		gdParams.addCheckbox("Intermediate averages?", Prefs.get("RegisterNDFFT.IA.bSaveIntermediate",true));
+		gdParams.addCheckbox("Registered inputs?", Prefs.get("RegisterNDFFT.IA.bOutputInput",true));
+		gdParams.addCheckbox("SD image?", Prefs.get("RegisterNDFFT.IA.bShowSD",false));
 
-		gd1.addDialogListener(this);
-		gd1.showDialog();
+		gdParams.addDialogListener(this);
+		gdParams.showDialog();
 		
-		if ( gd1.wasCanceled() )
+		if ( gdParams.wasCanceled() )
 			return false;
 		
+//		if(imageSet.bMultiCh)
+//		{
+//			imageSet.alignChannel = gd1.getNextChoiceIndex();
+//		}
+//		
+//		nIniTemplate = gd1.getNextChoiceIndex();
+//		Prefs.set("RegisterNDFFT.IA.nIniTemplate", sIniTemplate[nIniTemplate]);
+		
+//		nIterN  = (int)gd1.getNextNumber();
+//		Prefs.set("RegisterNDFFT.IA.nIterN", nIterN);
+//		
+//		nAveragingAim = gd1.getNextChoiceIndex();
+//		Prefs.set("RegisterNDFFT.IA.nAveragingAim", sAveragingAim[nAveragingAim]);
+//		
+//		bZeroMask  = gd1.getNextBoolean();
+//		Prefs.set("RegisterNDFFT.IA.bExcludeZeros", bZeroMask);
+//		
+//		nConstrainReg = gd1.getNextChoiceIndex();
+//		Prefs.set("RegisterNDFFT.IA.sConstrain", limitsReg[nConstrainReg]);
+//		
+//		IJ.log("Initial template: "+ sIniTemplate[nIniTemplate]);
+//		
+//		IJ.log("Template calculation: "+ sAveragingAim[nAveragingAim]);
+//		if(nAveragingAim == TemplateAveraging.AVERAGE)
+//		{
+//			bIgnoreZeroInAveraging = false;
+//		}
+//		if(nAveragingAim == TemplateAveraging.MASKED_AVERAGE)
+//		{
+//			bIgnoreZeroInAveraging = true;
+//		}
+//
+//		
+//		if(bZeroMask)
+//		{
+//			IJ.log("Using zero masked cross-correlation.");
+//		}
+//		else
+//		{
+//			IJ.log("Using non-masked cross-correlation.");			
+//		}
+//		
+//		
+//		if(nIterN==0)
+//		{
+//			IJ.log("Iteration count is equal to zero, no registration, only CC/average calculation.");
+//		}
+//		else
+//		{
+//		
+//			if(nConstrainReg == 0)
+//			{
+//				IJ.log("Averaging without constrains.");
+//			}
+//			else
+//			{
+//				if(nConstrainReg == 1)
+//				{
+//					IJ.log("Averaging with constrain specified in voxels:");
+//	
+//					for(d=0;d<nDimReg;d++)
+//					{
+//						dLimits[d]=Math.abs(gd1.getNextNumber());
+//						Prefs.set("RegisterNDFFT.IA.dMax"+sDims.charAt(d)+"px",dLimits[d]);
+//						IJ.log("Axis " +sDims.charAt(d)+": "+df1.format(dLimits[d])+" pixels");
+//					}
+//					
+//				}
+//				else
+//				{
+//					IJ.log("Averaging with constrain specified as a fraction of max displacement:");
+//					for(d=0;d<nDimReg;d++)
+//					{
+//						dLimits[d]=Math.min(Math.abs(gd1.getNextNumber()), 1.0);
+//						Prefs.set("RegisterNDFFT.IA.dMax"+sDims.charAt(d)+"fr",dLimits[d]);
+//						IJ.log("Axis " +sDims.charAt(d)+": "+df1.format(dLimits[d]));
+//					}
+//				}
+//			}
+//			
+//			if(nConstrainReg == 1)
+//			{
+//				long[] minI = new long [nDimReg];
+//				long[] maxI = new long [nDimReg];
+//				for(d=0;d<nDimReg;d++)
+//				{
+//					maxI[d] = (long) dLimits[d];
+//					minI[d] = (long) ((-1.0)*dLimits[d]);
+//				}
+//				limInterval = new FinalInterval(minI, maxI);
+//			}
+//			if(nConstrainReg == 2)
+//			{
+//				lim_fractions = new double [nDimReg];
+//				for(d=0;d<nDimReg;d++)
+//				{
+//					lim_fractions[d] = dLimits[d];
+//				}
+//			}
+//		}
+//		
+//		bSaveIntermediate = gd1.getNextBoolean();
+//		Prefs.set("RegisterNDFFT.IA.bSaveIntermediate", bSaveIntermediate);
+//		
+//		bOutputInput = gd1.getNextBoolean();
+//		Prefs.set("RegisterNDFFT.IA.bOutputInput", bOutputInput);
+//		
+//		bShowSD = gd1.getNextBoolean();
+//		Prefs.set("RegisterNDFFT.IA.bShowSD", bShowSD);
+		
+		
+		
+		DirectoryChooser dc = new DirectoryChooser ( "Choose a folder to save output..." );
+		sPathGeneralOutput = dc.getDirectory();
+		if(sPathGeneralOutput == null)
+			return false;
+		
+		if(bSaveIntermediate && nIterN>0)
+		{
+			sPathIntermediate  = sPathGeneralOutput +"intermediate/";
+			File theDir = new File(sPathIntermediate);
+			if (!theDir.exists())
+			{
+			    theDir.mkdirs();
+			}
+			
+		}
+		if(bOutputInput)
+		{
+			sPathRegistered  = sPathGeneralOutput +"registered/";
+			File theDir = new File(sPathRegistered);
+			if (!theDir.exists())
+			{
+			    theDir.mkdirs();
+			}
+		}
+		return true;
+
+	}
+	
+	
+	@Override
+	public boolean dialogItemChanged(GenericDialog gd, AWTEvent e) {
+		
+		int d;
+		
+		if(e!=null)
+		{
+			
+			if(e.getSource()==limitCh)
+			{
+				switch (limitCh.getSelectedIndex())
+				{
+					case 0:
+						for(d=0;d<nDimReg;d++)
+						{
+							limName[d].setText("No "+sDims.charAt(d)+" limit");
+							limVal[d].setEnabled(false);
+						}
+						break;
+					case 1:
+						for(d=0;d<nDimReg;d++)
+						{
+							limName[d].setText(sDims.charAt(d)+" limit (px)");
+							limVal[d].setEnabled(true);
+							limVal[d].setText(df1.format(Prefs.get("RegisterNDFFT.IA.dMax"+sDims.charAt(d)+"px", 10.0)));
+						}
+						break;
+					case 2:
+						for(d=0;d<nDimReg;d++)
+						{
+							limName[d].setText(sDims.charAt(d)+" limit (0-1)");
+							limVal[d].setEnabled(true);
+							limVal[d].setText(df1.format(Prefs.get("RegisterNDFFT.IA.dMax"+sDims.charAt(d)+"fr", 0.5)));
+
+						}
+						break;
+				}
+			}
+		}
+		//read/set parameters to allow macro recording
+		if(gdParams.wasOKed())
+		{
+			readDialogParameters();
+		}			
+		
+		return true;
+	}
+	/** function to set method parameters from the user dialog input **/
+	void readDialogParameters()
+	{
+		int d;
+		double [] dLimits = new double [nDimReg];
 		if(imageSet.bMultiCh)
 		{
-			imageSet.alignChannel = gd1.getNextChoiceIndex();
+			imageSet.alignChannel = gdParams.getNextChoiceIndex();
 		}
 		
-		nIniTemplate = gd1.getNextChoiceIndex();
+		nIniTemplate = gdParams.getNextChoiceIndex();
 		Prefs.set("RegisterNDFFT.IA.nIniTemplate", sIniTemplate[nIniTemplate]);
 		
-		nIterN  = (int)gd1.getNextNumber();
+		nIterN  = (int)gdParams.getNextNumber();
 		Prefs.set("RegisterNDFFT.IA.nIterN", nIterN);
 		
-		nAveragingAim = gd1.getNextChoiceIndex();
+		nAveragingAim = gdParams.getNextChoiceIndex();
 		Prefs.set("RegisterNDFFT.IA.nAveragingAim", sAveragingAim[nAveragingAim]);
 		
-		bZeroMask  = gd1.getNextBoolean();
+		bZeroMask  = gdParams.getNextBoolean();
 		Prefs.set("RegisterNDFFT.IA.bExcludeZeros", bZeroMask);
 		
-		nConstrainReg = gd1.getNextChoiceIndex();
+		nConstrainReg = gdParams.getNextChoiceIndex();
 		Prefs.set("RegisterNDFFT.IA.sConstrain", limitsReg[nConstrainReg]);
 		
 		IJ.log("Initial template: "+ sIniTemplate[nIniTemplate]);
@@ -708,7 +903,7 @@ public class IterativeAveraging implements PlugIn, DialogListener {
 	
 					for(d=0;d<nDimReg;d++)
 					{
-						dLimits[d]=Math.abs(gd1.getNextNumber());
+						dLimits[d]=Math.abs(gdParams.getNextNumber());
 						Prefs.set("RegisterNDFFT.IA.dMax"+sDims.charAt(d)+"px",dLimits[d]);
 						IJ.log("Axis " +sDims.charAt(d)+": "+df1.format(dLimits[d])+" pixels");
 					}
@@ -719,7 +914,7 @@ public class IterativeAveraging implements PlugIn, DialogListener {
 					IJ.log("Averaging with constrain specified as a fraction of max displacement:");
 					for(d=0;d<nDimReg;d++)
 					{
-						dLimits[d]=Math.min(Math.abs(gd1.getNextNumber()), 1.0);
+						dLimits[d]=Math.min(Math.abs(gdParams.getNextNumber()), 1.0);
 						Prefs.set("RegisterNDFFT.IA.dMax"+sDims.charAt(d)+"fr",dLimits[d]);
 						IJ.log("Axis " +sDims.charAt(d)+": "+df1.format(dLimits[d]));
 					}
@@ -747,90 +942,19 @@ public class IterativeAveraging implements PlugIn, DialogListener {
 			}
 		}
 		
-		bSaveIntermediate = gd1.getNextBoolean();
+		bSaveIntermediate = gdParams.getNextBoolean();
 		Prefs.set("RegisterNDFFT.IA.bSaveIntermediate", bSaveIntermediate);
 		
-		bOutputInput = gd1.getNextBoolean();
+		bOutputInput = gdParams.getNextBoolean();
 		Prefs.set("RegisterNDFFT.IA.bOutputInput", bOutputInput);
 		
-		bShowSD = gd1.getNextBoolean();
+		bShowSD = gdParams.getNextBoolean();
 		Prefs.set("RegisterNDFFT.IA.bShowSD", bShowSD);
 		
-		DirectoryChooser dc = new DirectoryChooser ( "Choose a folder to save output..." );
-		sPathGeneralOutput = dc.getDirectory();
-		if(sPathGeneralOutput == null)
-			return false;
-		
-		if(bSaveIntermediate && nIterN>0)
-		{
-			sPathIntermediate  = sPathGeneralOutput +"intermediate/";
-			File theDir = new File(sPathIntermediate);
-			if (!theDir.exists())
-			{
-			    theDir.mkdirs();
-			}
-			
-		}
-		if(bOutputInput)
-		{
-			sPathRegistered  = sPathGeneralOutput +"registered/";
-			File theDir = new File(sPathRegistered);
-			if (!theDir.exists())
-			{
-			    theDir.mkdirs();
-			}
-		}
-		return true;
-
-	}
-	
-	
-	@Override
-	public boolean dialogItemChanged(GenericDialog gd, AWTEvent e) {
-		int d;
-		
-		if(e!=null)
-		{
-			DecimalFormatSymbols symbols = new DecimalFormatSymbols();
-			symbols.setDecimalSeparator('.');
-			DecimalFormat df1 = new DecimalFormat ("#.##", symbols);
-			
-			if(e.getSource()==limitCh)
-			{
-				switch (limitCh.getSelectedIndex())
-				{
-					case 0:
-						for(d=0;d<nDimReg;d++)
-						{
-							limName[d].setText("No "+sDims.charAt(d)+" limit");
-							limVal[d].setEnabled(false);
-						}
-						break;
-					case 1:
-						for(d=0;d<nDimReg;d++)
-						{
-							limName[d].setText(sDims.charAt(d)+" limit (px)");
-							limVal[d].setEnabled(true);
-							limVal[d].setText(df1.format(Prefs.get("RegisterNDFFT.IA.dMax"+sDims.charAt(d)+"px", 10.0)));
-						}
-						break;
-					case 2:
-						for(d=0;d<nDimReg;d++)
-						{
-							limName[d].setText(sDims.charAt(d)+" limit (0-1)");
-							limVal[d].setEnabled(true);
-							limVal[d].setText(df1.format(Prefs.get("RegisterNDFFT.IA.dMax"+sDims.charAt(d)+"fr", 0.5)));
-
-						}
-						break;
-				}
-			}
-		}
-		return true;
 	}
 	
 	/** function returns aligned intervals **/
-	ArrayList<RandomAccessibleInterval< FloatType >> getAlignedRAIs(final ArrayList<long []> shifts_, boolean bIgnoreZero)
+	ArrayList<RandomAccessibleInterval< FloatType >> getAlignedRAIs(final ArrayList<long []> shifts_)
 	{
 		ArrayList<RandomAccessibleInterval< FloatType >> imgs_avrg_out; 
 		
@@ -841,7 +965,7 @@ public class IterativeAveraging implements PlugIn, DialogListener {
 		else
 		{
 			// calculate new img array with applied displacements	
-			imgs_avrg_out = new ArrayList<RandomAccessibleInterval< FloatType >>();
+			imgs_avrg_out = new ArrayList<>();
 			buildShiftedIntervals(imageSet.imgs, imgs_avrg_out,shifts_);
 		}
 		return imgs_avrg_out;
