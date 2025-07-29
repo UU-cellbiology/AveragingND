@@ -1,4 +1,4 @@
-[![](https://github.com/ekatrukha/AveragingND/actions/workflows/build-main.yml/badge.svg)](https://github.com/ekatrukha/AveragingND/actions/workflows/build-main.yml) [![DOI](https://zenodo.org/badge/429354088.svg)](https://doi.org/10.5281/zenodo.16570535)
+[![](https://github.com/ekatrukha/AveragingND/actions/workflows/build.yml/badge.svg)](https://github.com/ekatrukha/AveragingND/actions/workflows/build.yml) [![DOI](https://zenodo.org/badge/429354088.svg)](https://doi.org/10.5281/zenodo.16570535)
 
 AveragingND
 ===
